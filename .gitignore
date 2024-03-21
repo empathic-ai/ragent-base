@@ -1,0 +1,9 @@
+/target
+/dist
+/pkg
+/Cargo.lock
+
+*.zip
+*.wasm
+*.ipk
+*.DS_Store
