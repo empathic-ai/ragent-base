@@ -8,6 +8,10 @@ description = "A framework for building LLM agents."
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[features]
+default = ["anthropic"]
+xtensa = []
+
 [dependencies]
 ragent_core = { git = "https://github.com/empathic-ai/ragent.git" }
 ragent_derive = { git = "https://github.com/empathic-ai/ragent-derive.git" }
@@ -40,7 +44,7 @@ async-trait = "0.1.75"
 crossbeam = "0.8.2"
 cpal = "0.15.2"
 aura-api-helper = { git = "https://github.com/empathic-ai/aura-api-helper.git" }
-anthropic = { git = "https://github.com/Catchawink/anthropic-rs.git", default-features = false }
+anthropic = { git = "https://github.com/Catchawink/anthropic-rs.git", default-features = false, optional = true }
 tokio-stream = "0.1.14"
 
 [target.'cfg(not(target_arch = "xtensa"))'.dependencies]
