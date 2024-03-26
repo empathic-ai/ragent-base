@@ -32,12 +32,16 @@ pub trait Synthesizer: Send + Sync {
 
 pub mod prelude {
     #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(feature = "xtensa"))]
     pub use super::openai_tts::*;
     #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(feature = "xtensa"))]
     pub use super::play_ht::*;
     #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(feature = "xtensa"))]
     pub use super::eleven_labs::*;
     #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(feature = "xtensa"))]
     pub use super::azure_tts::*;
     pub use super::*;
 }

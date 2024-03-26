@@ -17,6 +17,7 @@ pub trait ImageGenerator {
 
 pub mod prelude {
     #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(feature = "xtensa"))]
     pub use super::dalle2::*;
     pub use super::*;
 }
