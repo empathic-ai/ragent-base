@@ -10,7 +10,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 ragent_core = { git = "https://github.com/empathic-ai/ragent.git" }
-ragent_derive = { git = "https://github.com/empathic-ai/ragent.git" }
+ragent_derive = { git = "https://github.com/empathic-ai/ragent-derive.git" }
 empathic_audio = { git = "https://github.com/empathic-ai/empathic-audio.git" }
 common = { git = "https://github.com/empathic-ai/common.git" }
 bevy = { version = "0.13.0", default-features = false, features = ["bevy_ui", "bevy_asset"] }
