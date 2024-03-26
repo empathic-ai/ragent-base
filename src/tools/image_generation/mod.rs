@@ -4,6 +4,7 @@ use anyhow::Result;
 use std::collections::HashMap;
 
 #[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(feature = "xtensa"))]
 pub mod dalle2;
 
 pub struct ImageResult {
@@ -16,6 +17,7 @@ pub trait ImageGenerator {
 
 pub mod prelude {
     #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(feature = "xtensa"))]
     pub use super::dalle2::*;
     pub use super::*;
 }
