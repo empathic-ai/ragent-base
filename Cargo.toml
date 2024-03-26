@@ -9,7 +9,7 @@ description = "A framework for building LLM agents."
 crate-type = ["cdylib", "rlib"]
 
 [features]
-default = ["anthropic"]
+default = ["anthropic", "deepgram", "openai-api-rs"]
 xtensa = []
 
 [dependencies]
@@ -59,8 +59,8 @@ openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git", branc
 tonic = { version = "0.10.2", default-features = false, features = ["prost", "codegen"] }
 
 [target.'cfg(all(not(target_arch = "wasm32")))'.dependencies]
-deepgram = { git = "https://github.com/empathic-ai/deepgram-rust-sdk.git" }
-openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git", branch = "streaming" }
+deepgram = { git = "https://github.com/empathic-ai/deepgram-rust-sdk.git", optional = true }
+openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git", branch = "streaming", optional = true }
 
 [build-dependencies]
 tonic-build = { version = "0.10.2", default-features = false, features = ["prost"] }
