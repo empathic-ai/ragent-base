@@ -161,8 +161,7 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
         UserEvent {
             user_id: self.get_user_id(),
             args: task,
-            created_time: Some(SystemTime::now()),
-            token: CancellationToken::new()
+            created_time: Some(SystemTime::now())
         }
     }
 
@@ -556,8 +555,7 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
             let ev = UserEvent {
                 user_id: self.get_user_id().clone(),
                 args: task,//command_name.clone().to_lowercase(),
-                created_time: Some(SystemTime::now()),
-                token: token.clone()
+                created_time: Some(SystemTime::now())
             };
             self.new_message(Role::Agent, ev.to_description());
             self.output_event(ev.clone()).await?;

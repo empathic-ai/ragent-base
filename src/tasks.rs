@@ -206,10 +206,70 @@ pub struct MusicEventArgs {
     pub genre: String
 }
 
-#[derive(Debug)]
+#[derive(Debug, TypePath)]
 pub struct Dynamic {
     pub value: Box<dyn Reflect>,
     //pub cloned_func: Arc<dyn CloneBoxedCloneFunc>
+}
+
+impl Reflect for Dynamic {
+    fn get_represented_type_info(&self) -> Option<&'static TypeInfo> {
+        self.value.get_represented_type_info()
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
+        self.value.into_any()
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self.value.as_any()
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self.value.as_any_mut()
+    }
+
+    fn into_reflect(self: Box<Self>) -> Box<dyn Reflect> {
+        self.value.into_reflect()
+    }
+
+    fn as_reflect(&self) -> &dyn Reflect {
+        self.value.as_reflect()
+    }
+
+    fn as_reflect_mut(&mut self) -> &mut dyn Reflect {
+        self.value.as_reflect_mut()
+    }
+
+    fn apply(&mut self, value: &dyn Reflect) {
+        self.value.apply(value)
+    }
+
+    fn set(&mut self, value: Box<dyn Reflect>) -> std::prelude::v1::Result<(), Box<dyn Reflect>> {
+        self.value.set(value)
+    }
+
+    fn reflect_ref(&self) -> ReflectRef {
+        self.value.reflect_ref()
+    }
+
+    fn reflect_mut(&mut self) -> ReflectMut {
+        self.value.reflect_mut()
+    }
+
+    fn reflect_owned(self: Box<Self>) -> bevy::reflect::ReflectOwned {
+        self.value.reflect_owned()
+    }
+
+    fn clone_value(&self) -> Box<dyn Reflect> {
+        self.value.clone_value()
+    }
+}
+
+impl FromReflect for Dynamic {
+    fn from_reflect(val: &(dyn bevy::prelude::Reflect + 'static)) -> std::option::Option<Self> {
+        Some(Dynamic::from_reflect(val.clone_value()))
+    }
 }
 
 impl Dynamic {
@@ -259,21 +319,20 @@ impl Clone for Dynamic {
 }
 
 // Represents an instance of a task, executed by some user
-#[derive(Clone, Debug, Component)]
+#[derive(Clone, Debug, Component, Reflect)]
 pub struct UserEvent {
     pub user_id: String,
     pub args: Dynamic,
-    pub created_time: Option<SystemTime>,
-    pub token: CancellationToken
+    #[reflect(ignore)] // TODO:
+    pub created_time: Option<SystemTime>
 }
 
 impl UserEvent {
-    pub fn new(user_id: String, task: Dynamic, token: CancellationToken) -> Self{
+    pub fn new(user_id: String, task: Dynamic) -> Self{
         UserEvent {
             user_id,
             args: task,
-            created_time: Some(SystemTime::now()),
-            token: token
+            created_time: Some(SystemTime::now())
         }
     }
 

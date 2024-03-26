@@ -96,7 +96,7 @@ impl BaseAgent {
                         if !ev.trim_start().trim_end().is_empty() {
                             println!("Sending transcription result to agent!");
                     
-                            let ev = UserEvent::new("".to_string(), Dynamic::new(SpeakEventArgs { text: ev }), CancellationToken::new());
+                            let ev = UserEvent::new("".to_string(), Dynamic::new(SpeakEventArgs { text: ev }));
 
                             _input_tx.send(ev).await.expect("Failed to send speak event");
                         }
@@ -140,24 +140,24 @@ impl BaseAgent {
                 
                 let _ev = ev.clone();
                 let args = ev.args;
-                let token = ev.token.clone();
+                //let token = ev.token.clone();
 
-                if token.is_cancelled() {
-                    continue;
-                }
+                //if token.is_cancelled() {
+                //    continue;
+                //}
                 
                 if let Some(args) = args.clone().cast::<SpeakResultEventArgs>() {
                     let asset = _asset_cache.lock().await.get(args.asset_id.clone()).await.expect("Failed to get asset");
                 
-                    if token.is_cancelled() {
-                        continue;
-                    }
+                    //if token.is_cancelled() {
+                    //    continue;
+                    //}
 
                     if !asset.bytes.is_empty() {
 
                         let bytes = asset.bytes.to_vec();
                         
-                        _output_tx.send(UserEvent::new(ev.user_id, Dynamic::new(SpeakBytesEventArgs { bytes }), token)).unwrap();//.await;
+                        _output_tx.send(UserEvent::new(ev.user_id, Dynamic::new(SpeakBytesEventArgs { bytes }))).unwrap();//.await;
 
                         //audio_output_tx.send(asset.bytes).await;
 
@@ -188,11 +188,11 @@ impl BaseAgent {
 
                 let user_id = ev.user_id;
                 let args = ev.args;
-                let token = ev.token;
+                //let token = ev.token;
 
-                if token.is_cancelled() {
-                    continue;
-                }
+                //if token.is_cancelled() {
+                //    continue;
+                //}
 
                 if let Some(args) = args.clone().cast::<SpeakEventArgs>() {
                     //let voice_name = "smexy-frog".to_string();
@@ -217,7 +217,7 @@ impl BaseAgent {
             
                     asset_cache.lock().await.load_asset(asset_id, load_func, false).await.expect("Asset load error");
             
-                    voice_tx.send(UserEvent::new(user_id, Dynamic::new(SpeakResultEventArgs { asset_id: asset_id}), token.clone())).await;
+                    voice_tx.send(UserEvent::new(user_id, Dynamic::new(SpeakResultEventArgs { asset_id: asset_id}))).await;
                 }
             }
         });
