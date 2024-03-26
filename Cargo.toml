@@ -17,7 +17,7 @@ ragent_core = { git = "https://github.com/empathic-ai/ragent.git" }
 ragent_derive = { git = "https://github.com/empathic-ai/ragent-derive.git" }
 empathic_audio = { git = "https://github.com/empathic-ai/empathic-audio.git" }
 common = { git = "https://github.com/empathic-ai/common.git" }
-bevy = { version = "0.13.0", default-features = false, features = ["bevy_ui", "bevy_asset"] }
+bevy = { version = "0.13.0", default-features = false }
 #bevy_reflect = { version = "0.11.0", default-features = false, features = ["bevy", "documentation"] }
 time = { git = "https://github.com/empathic-ai/time.git", features = ["std", "wasm-bindgen", "alloc", "macros", "formatting", "parsing"] }
 base64 = "0.21.5"
