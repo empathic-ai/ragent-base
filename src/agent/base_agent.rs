@@ -15,8 +15,10 @@ use futures_util::StreamExt;
 use anyhow::{Result, anyhow};
 use common::prelude::*;
 use empathic_audio::*;
+use bevy::prelude::*;
 
-pub struct BaseAgent {
+#[derive(Component)]
+pub struct AgentWorker {
     pub transcriber: Option<Box<dyn Transcriber>>,
     pub synthesizer: Option<Box<dyn Synthesizer>>,
     pub chat_completer: Box<dyn ChatCompleter>,
@@ -33,8 +35,8 @@ pub struct BaseAgent {
     pub agent_token: CancellationToken
 }
 
-impl BaseAgent {
-    pub fn new(config: AgentConfig) -> Self {
+impl AgentWorker {
+    pub fn new(agent_id: Thing, config: AgentConfig) -> Self {
             
         let system_prompt = config.description.clone();
 
@@ -208,7 +210,7 @@ impl BaseAgent {
             
                         let bytes = result.bytes.to_vec();
                         let bytes = samples_to_wav(1, 24000, 16, bytes);
-                        Ok(Asset::new(bytes))
+                        Ok(crate::asset_cache::Asset::new(bytes))
                     };
 
                     let asset_id = Uuid::new_v4();
@@ -229,7 +231,7 @@ impl BaseAgent {
 }
 
 #[async_trait]
-impl Agent for BaseAgent {
+impl Agent for AgentWorker {
     async fn stop(&mut self) -> Result<()> {
         self.agent_token.cancel();
         Ok(())
