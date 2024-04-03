@@ -13,7 +13,7 @@ default = ["anthropic", "deepgram", "openai-api-rs", "empathic_audio/default", "
 xtensa = ["empathic_audio/xtensa", "common/xtensa"]
 
 [dependencies]
-ragent_core = { git = "https://github.com/empathic-ai/ragent.git" }
+ragent_core = { git = "https://github.com/empathic-ai/ragent-core.git" }
 ragent_derive = { git = "https://github.com/empathic-ai/ragent-derive.git" }
 empathic_audio = { git = "https://github.com/empathic-ai/empathic-audio.git", default-features = false }
 common = { git = "https://github.com/empathic-ai/common.git", default-features = false }
