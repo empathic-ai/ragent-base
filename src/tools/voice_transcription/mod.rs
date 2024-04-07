@@ -1,8 +1,8 @@
 #[cfg(not(target_arch = "wasm32"))]
-#[cfg(not(feature = "xtensa"))]
+#[cfg(not(target_arch = "xtensa"))]
 pub mod deepgram_transcriber;
 #[cfg(not(target_arch = "wasm32"))]
-#[cfg(not(feature = "xtensa"))]
+#[cfg(not(target_arch = "xtensa"))]
 pub use deepgram_transcriber::*;
 
 pub mod whisper_transcriber;

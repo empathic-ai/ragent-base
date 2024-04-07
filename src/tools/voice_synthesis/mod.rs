@@ -4,16 +4,16 @@ use anyhow::Result;
 use std::collections::HashMap;
 
 #[cfg(not(target_arch = "wasm32"))]
-#[cfg(not(feature = "xtensa"))]
+#[cfg(not(target_arch = "xtensa"))]
 pub mod openai_tts;
 #[cfg(not(target_arch = "wasm32"))]
-#[cfg(not(feature = "xtensa"))]
+#[cfg(not(target_arch = "xtensa"))]
 pub mod play_ht;
 #[cfg(not(target_arch = "wasm32"))]
-#[cfg(not(feature = "xtensa"))]
+#[cfg(not(target_arch = "xtensa"))]
 pub mod eleven_labs;
 #[cfg(not(target_arch = "wasm32"))]
-#[cfg(not(feature = "xtensa"))]
+#[cfg(not(target_arch = "xtensa"))]
 pub mod azure_tts;
 
 pub mod piper_synthesizer;
@@ -32,16 +32,16 @@ pub trait Synthesizer: Send + Sync {
 
 pub mod prelude {
     #[cfg(not(target_arch = "wasm32"))]
-    #[cfg(not(feature = "xtensa"))]
+    #[cfg(not(target_arch = "xtensa"))]
     pub use super::openai_tts::*;
     #[cfg(not(target_arch = "wasm32"))]
-    #[cfg(not(feature = "xtensa"))]
+    #[cfg(not(target_arch = "xtensa"))]
     pub use super::play_ht::*;
     #[cfg(not(target_arch = "wasm32"))]
-    #[cfg(not(feature = "xtensa"))]
+    #[cfg(not(target_arch = "xtensa"))]
     pub use super::eleven_labs::*;
     #[cfg(not(target_arch = "wasm32"))]
-    #[cfg(not(feature = "xtensa"))]
+    #[cfg(not(target_arch = "xtensa"))]
     pub use super::azure_tts::*;
     pub use super::*;
 }

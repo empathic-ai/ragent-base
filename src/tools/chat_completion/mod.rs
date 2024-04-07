@@ -1,17 +1,17 @@
 #[cfg(not(target_arch = "wasm32"))]
-#[cfg(not(feature = "xtensa"))]
+#[cfg(not(target_arch = "xtensa"))]
 pub mod claude;
 use std::pin::Pin;
 
 #[cfg(not(target_arch = "wasm32"))]
-#[cfg(not(feature = "xtensa"))]
+#[cfg(not(target_arch = "xtensa"))]
 pub use claude::*;
 
 #[cfg(not(target_arch = "wasm32"))]
-#[cfg(not(feature = "xtensa"))]
+#[cfg(not(target_arch = "xtensa"))]
 pub mod chat_gpt;
 #[cfg(not(target_arch = "wasm32"))]
-#[cfg(not(feature = "xtensa"))]
+#[cfg(not(target_arch = "xtensa"))]
 pub use chat_gpt::*;
 
 pub mod llama;
