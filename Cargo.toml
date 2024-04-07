@@ -8,17 +8,12 @@ description = "A framework for building LLM agents."
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-[features]
-default = ["anthropic", "deepgram", "openai-api-rs", "empathic_audio/default", "common/default"]
-xtensa = ["empathic_audio/xtensa", "common/xtensa"]
-
 [dependencies]
 ragent_core = { git = "https://github.com/empathic-ai/ragent-core.git" }
 ragent_derive = { git = "https://github.com/empathic-ai/ragent-derive.git" }
-empathic_audio = { git = "https://github.com/empathic-ai/empathic-audio.git", default-features = false }
-common = { git = "https://github.com/empathic-ai/common.git", default-features = false }
+empathic_audio = { git = "https://github.com/empathic-ai/empathic-audio.git" }
+common = { git = "https://github.com/empathic-ai/common.git" }
 bevy = { version = "=0.13.0", default-features = false }
-#bevy_reflect = { version = "0.11.0", default-features = false, features = ["bevy", "documentation"] }
 time = { git = "https://github.com/empathic-ai/time.git", features = ["std", "wasm-bindgen", "alloc", "macros", "formatting", "parsing"] }
 base64 = "0.21.5"
 serde = { version = "1.0.149", features = ["derive"] }
@@ -40,23 +35,23 @@ async-trait = "0.1.75"
 crossbeam = "0.8.2"
 cpal = "0.15.2"
 aura-api-helper = { git = "https://github.com/empathic-ai/aura-api-helper.git" }
-anthropic = { git = "https://github.com/Catchawink/anthropic-rs.git", default-features = false, optional = true }
 tokio-stream = "0.1.14"
 prost = "0.12.1"
 
 [target.'cfg(not(target_arch = "xtensa"))'.dependencies]
 reqwest = { version = "0.11.13", features = ["json", "stream"] }
+anthropic = { git = "https://github.com/Catchawink/anthropic-rs.git", default-features = false }
 
 [target.'cfg(all(not(target_arch = "xtensa"), not(target_arch = "wasm32")))'.dependencies]
 #pyo3 = "0.20.0"
 tonic = "0.10.2"
 openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git", branch = "streaming" }
+deepgram = { git = "https://github.com/empathic-ai/deepgram-rust-sdk.git" }
 
 [target.'cfg(all(target_arch = "wasm32"))'.dependencies]
 tonic = { version = "0.10.2", default-features = false, features = ["prost", "codegen"] }
 
 [target.'cfg(all(not(target_arch = "wasm32")))'.dependencies]
-deepgram = { git = "https://github.com/empathic-ai/deepgram-rust-sdk.git", optional = true }
 openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git", branch = "streaming", optional = true }
 
 [build-dependencies]
