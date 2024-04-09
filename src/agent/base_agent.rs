@@ -98,9 +98,9 @@ impl AgentWorker {
                         if !ev.trim_start().trim_end().is_empty() {
                             println!("Sending transcription result to agent!");
                     
-                            let ev = UserEvent::new("".to_string(), Dynamic::new(SpeakEventArgs { text: ev }));
+                            let ev = UserEventType::SpeakEvent(SpeakEvent { text: ev });
 
-                            _input_tx.send(ev).await.expect("Failed to send speak event");
+                            _input_tx.send(UserEvent::new("".to_string(), ev)).await.expect("Failed to send speak event");
                         }
                     },
                     Err(err) => {
@@ -140,16 +140,14 @@ impl AgentWorker {
                     continue;
                 }
                 
-                let _ev = ev.clone();
-                let args = ev.args;
                 //let token = ev.token.clone();
 
                 //if token.is_cancelled() {
                 //    continue;
                 //}
                 
-                if let Some(args) = args.clone().cast::<SpeakResultEventArgs>() {
-                    let asset = _asset_cache.lock().await.get(args.asset_id.clone()).await.expect("Failed to get asset");
+                if let Some(UserEventType::SpeakResultEvent(event_type)) = ev.user_event_type {
+                    let asset = _asset_cache.lock().await.get(event_type.asset_id.clone()).await.expect("Failed to get asset");
                 
                     //if token.is_cancelled() {
                     //    continue;
@@ -159,7 +157,8 @@ impl AgentWorker {
 
                         let bytes = asset.bytes.to_vec();
                         
-                        _output_tx.send(UserEvent::new(ev.user_id, Dynamic::new(SpeakBytesEventArgs { bytes }))).unwrap();//.await;
+                        //ev.user_id
+                        _output_tx.send(UserEvent::new(ev.user_id, UserEventType::SpeakBytesEvent(SpeakBytesEvent { data: bytes }))).unwrap();//.await;
 
                         //audio_output_tx.send(asset.bytes).await;
 
@@ -181,7 +180,7 @@ impl AgentWorker {
 
             while let Ok(ev) = output_rx.recv().await {
 
-                let ev_description = ev.to_description();
+                let ev_description = ev.get_event_description().unwrap();
                 log(format!("Processing event elsewhere: {}", ev_description));        
 
                 if _agent_token.is_cancelled() {
@@ -189,14 +188,14 @@ impl AgentWorker {
                 }
 
                 let user_id = ev.user_id;
-                let args = ev.args;
+                //let args = ev.args;
                 //let token = ev.token;
 
                 //if token.is_cancelled() {
                 //    continue;
                 //}
 
-                if let Some(args) = args.clone().cast::<SpeakEventArgs>() {
+                if let Some(UserEventType::SpeakEvent(args)) = ev.user_event_type {
                     //let voice_name = "smexy-frog".to_string();
                     let voice_name = "smexy-frog".to_string();
                     let speech_text = args.text.clone();
@@ -213,13 +212,13 @@ impl AgentWorker {
                         Ok(crate::asset_cache::Asset::new(bytes))
                     };
 
-                    let asset_id = Uuid::new_v4();
+                    let asset_id = Uuid::new_v4().to_string();
             
                     //let user_id = self.agent.get_user_id().clone();
             
-                    asset_cache.lock().await.load_asset(asset_id, load_func, false).await.expect("Asset load error");
+                    asset_cache.lock().await.load_asset(asset_id.clone(), load_func, false).await.expect("Asset load error");
             
-                    voice_tx.send(UserEvent::new(user_id, Dynamic::new(SpeakResultEventArgs { asset_id: asset_id}))).await;
+                    voice_tx.send(UserEvent::new(user_id, UserEventType::SpeakResultEvent(SpeakResultEvent{ asset_id: asset_id}))).await;
                 }
             }
         });
@@ -241,8 +240,8 @@ impl Agent for AgentWorker {
         if let Ok(ev) = self.input_rx.try_recv() {
             //let __self = _self.clone();
             //tokio::spawn(async move {
-            if let Some(args) = ev.args.clone().cast::<SpeakBytesEventArgs>() {
-                self.transcriber_tx.send(Bytes::from_iter(args.bytes)).unwrap();
+            if let Some(UserEventType::SpeakBytesEvent(args)) = ev.user_event_type {
+                self.transcriber_tx.send(Bytes::from_iter(args.data)).unwrap();
             } else {
                 self.process_user_event(ev).await;
             }

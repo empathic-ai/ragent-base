@@ -157,6 +157,7 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
         Uuid::new_v4().to_string()
     }
 
+    /*
     fn new_event(&self, task: Dynamic) -> UserEvent {
         UserEvent {
             user_id: self.get_user_id(),
@@ -164,7 +165,7 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
             created_time: Some(SystemTime::now())
         }
     }
-
+    */
     //pub fn process(_commands: Commands, _agent_query: bevy::prelude::Query<(Entity, &mut Agent)>) {
     //}
 
@@ -312,7 +313,7 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
 
                 let args = self.parse_arguments(&args);
 
-                if !(task_name == get_event_name::<VoiceEventArgs>() || task_name == get_event_name::<SpeakEventArgs>()) {
+                if !(task_name == get_event_name::<VoiceEventArgs>() || task_name == get_event_name::<SpeakEvent>()) {
                     //self.config.task_configs
                     self.call_function(task_name, args, token.clone()).await;
                     //if let Some(type_info) = Named::default().get_represented_type_info() {
@@ -348,14 +349,14 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
       
             //println!("Dangling task name found: {}", dangling_task_name);
 
-            if (dangling_task_name == get_event_name::<VoiceEventArgs>() || dangling_task_name == get_event_name::<SpeakEventArgs>()) {
+            if (dangling_task_name == get_event_name::<VoiceEventArgs>() || dangling_task_name == get_event_name::<SpeakEvent>()) {
                 let args = dangling_text_task.substring(dangling_task_name.chars().count() + 1, dangling_text_task.chars().count()).to_string();
                 let args = self.parse_arguments(&args);
 
                 // TODO: Write more efficiently
                 if dangling_task_name == get_event_name::<VoiceEventArgs>() && (args.len() > 2 && args[2] != "\"" && args[2] != "\'") {
                     dangling_text_task = self.process_speech(dangling_task_name, args.clone(), token.clone()).await;
-                } else if dangling_task_name == get_event_name::<SpeakEventArgs>() && (args.len() > 0 && args[0] != "\"" && args[0] != "\'") {
+                } else if dangling_task_name == get_event_name::<SpeakEvent>() && (args.len() > 0 && args[0] != "\"" && args[0] != "\'") {
                     dangling_text_task = self.process_speech(dangling_task_name, args.clone(), token.clone()).await;
                 }
             }
@@ -445,7 +446,7 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
     
     async fn process_user_event(&mut self, ev: UserEvent) -> Result<()> {
 
-        let ev_description = ev.to_description();
+        let ev_description = ev.get_event_description()?;
         log(format!("Processing event: {}", ev_description));
 
         // Todo: Abort previous future if new submission is received (see OpenAI playground for recommendations)
@@ -459,7 +460,7 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
         //let _self = Arc::new(self);
         //let _self = Arc::clone(&self);
 
-        if !self.get_config().task_configs_by_name.contains_key(&get_event_name_from_type_name(ev.args.value.reflect_type_path())) {
+        if !self.get_config().task_configs_by_name.contains_key(&ev.get_event_name()?) {
             return Ok(());
         }
 
@@ -550,14 +551,10 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
         //log(format!("SENDING RESPONSE: {name}({args_description})"));
 
         if let Some(task_config) = self.get_config().task_configs_by_name.get(&name) {
-            let task = (task_config.create_task)(name, arguments)?;
+            let event_type = UserEventType::from(name, arguments)?;
 
-            let ev = UserEvent {
-                user_id: self.get_user_id().clone(),
-                args: task,//command_name.clone().to_lowercase(),
-                created_time: Some(SystemTime::now())
-            };
-            self.new_message(Role::Agent, ev.to_description());
+            let ev = UserEvent::new(self.get_user_id().clone(), event_type);
+            self.new_message(Role::Agent, ev.get_event_description()?);
             self.output_event(ev.clone()).await?;
             Ok(())
         } else {

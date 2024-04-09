@@ -3,7 +3,6 @@ use std::future::Future;
 use bytes::Bytes;
 use async_channel;
 use tokio::sync::Mutex;
-use uuid::Uuid;
 use std::sync::Arc;
 use anyhow::Result;
 use anyhow::anyhow;
@@ -34,7 +33,7 @@ pub enum AssetState {
 
 #[derive(Default)]
 pub struct AssetCache {
-    assets: Arc<Mutex<HashMap<Uuid, AssetState>>>,
+    assets: Arc<Mutex<HashMap<String, AssetState>>>,
 }
 
 impl AssetCache {
@@ -44,7 +43,7 @@ impl AssetCache {
         }
     }
 
-    pub async fn get(&self, key: Uuid) -> Result<Asset> {
+    pub async fn get(&self, key: String) -> Result<Asset> {
         let mut assets = self.assets.lock().await;
 
         match assets.get_mut(&key) {
@@ -62,16 +61,16 @@ impl AssetCache {
         }
     }
     
-    pub async fn load_asset(&mut self, asset_id: Uuid, load_func: impl Future<Output = Result<Asset>> + Send + 'static, wait_for_completion: bool) -> Result<()> {
+    pub async fn load_asset(&mut self, asset_id: String, load_func: impl Future<Output = Result<Asset>> + Send + 'static, wait_for_completion: bool) -> Result<()> {
         // Your asset loading logic here
         //let mut assets = self.assets.lock().await;
         let (tx, rx) = async_channel::bounded::<Asset>(1);
 
-        self.assets.lock().await.insert(asset_id, AssetState::Loading(rx));
+        self.assets.lock().await.insert(asset_id.clone(), AssetState::Loading(rx));
         let _assets = self.assets.clone();
         let load_func = async move {
             let asset = load_func.await.expect("Function failed to load asset");
-            _assets.lock().await.insert(asset_id, AssetState::Loaded(asset.clone()));
+            _assets.lock().await.insert(asset_id.clone(), AssetState::Loaded(asset.clone()));
             tx.send(asset).await;//.expect("Failed to send loaded asset!");
             tx.close();
         };

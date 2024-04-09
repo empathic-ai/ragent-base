@@ -18,7 +18,7 @@ option java_multiple_files = true;
 option java_package = "io.grpc.examples.agents";
 option java_outer_classname = "AgentsProto";
 
-package agents;
+package ragent;
 
 // Interface exported by the server.
 service AgentService {
@@ -53,12 +53,58 @@ service AgentService {
   //rpc RouteChat(stream RouteNote) returns (stream RouteNote) {}
 }
 
+// This is a test comment.
+message Thing {
+  // Define fields that match your Rust 'Thing' struct
+//  string id = 1;
+}
+
+// This is a test comment.
 message VoiceStreamResponse {
 }
 
+// This is a test comment.
 message VoiceStreamRequest {
+  // This is a test comment.
   oneof request {
     string agent_id = 1;
     bytes data = 2;
   }
 }
+
+// This is a test comment.
+message UserEvent {
+  string user_id = 1;
+  // This is a test comment.
+  oneof user_event_type {
+    SpeakBytesEvent speak_bytes_event = 100;
+    SpeakEvent speak_event = 102;
+    SpeakResultEvent speak_result_event = 103;
+    UserJoined user_joined = 104;
+    UserLeft user_left = 105;
+  }
+}
+
+// This is a test comment.
+message SpeakBytesEvent {
+  bytes data = 1;
+}
+
+// This is a test comment.
+message SpeakEvent {
+  string text = 1;
+}
+
+// This is a test comment.
+message SpeakResultEvent {
+  string asset_id = 1;
+}
+
+// This is a test comment.
+message UserJoined {
+}
+
+// This is a test comment.
+message UserLeft {
+}
+

@@ -129,11 +129,13 @@ fn camel_to_snake(s: &str) -> String {
     result
 }
 
+/*
 #[derive(Task, Default, Event, Reflect, Debug, Clone, Serialize, Deserialize, Documented)]
 /// Speaks text using the provided voice name and emotion
 pub struct SpeakEventArgs {
     pub text: String
 }
+ */
 
 #[derive(Task, Default, Event, Reflect, Debug, Clone, Serialize, Deserialize, Documented)]
 /// Speaks text using the provided voice name and emotion
@@ -143,6 +145,7 @@ pub struct VoiceEventArgs {
     pub text: String
 }
 
+/*
 #[derive(Task, Default, Event, Reflect, Debug, Clone, Serialize, Deserialize, Documented)]
 /// Represents a non-action--used instead of any other actions if it is most appropriate to wait for further outside input before responding. ONLY use this if explicitly waiting for input from a player.
 pub struct WaitEventArgs {
@@ -189,6 +192,7 @@ pub struct ImageEventArgs {
 pub struct ImageResultEventArgs {
     pub asset_id: Uuid
 }
+*/
 
 /*
 pub const MESSAGE: &str = "message";
@@ -300,6 +304,9 @@ impl Dynamic {
         }
     }
     pub fn cast<T>(self) -> Option<T> where T: Reflect + FromReflect + Typed {
+        dbg!(self.value.reflect_type_path());
+        dbg!(T::type_info().type_path());
+
         if self.value.reflect_type_path() == T::type_info().type_path() {
             T::from_reflect(self.value.as_reflect())
         } else {
@@ -318,6 +325,7 @@ impl Clone for Dynamic {
     }
 }
 
+/*
 // Represents an instance of a task, executed by some user
 #[derive(Clone, Debug, Component, Reflect)]
 pub struct UserEvent {
@@ -327,6 +335,7 @@ pub struct UserEvent {
     pub created_time: Option<SystemTime>
 }
 
+
 impl UserEvent {
     pub fn new(user_id: String, task: Dynamic) -> Self{
         UserEvent {
@@ -335,30 +344,8 @@ impl UserEvent {
             created_time: Some(SystemTime::now())
         }
     }
-
-    pub fn to_description(&self) -> String {
-        let ev_name = get_event_name_from_type_name(self.args.value.reflect_type_path());
-
-        let mut field_values = Vec::<Option::<String>>::new();
-
-        if let ReflectRef::Struct(args) = self.args.value.reflect_ref() {
-            for field in args.iter_fields() {
-                if let Some(field) = field.downcast_ref::<String>() {
-                    field_values.push(Some(field.to_owned()));
-                } else {
-                    field_values.push(None);
-                }
-            }
-        }
-
-        let args_description: String = field_values.iter()
-        .map(|s| format!(r#""{}""#, s.clone().unwrap_or("".to_string())))
-        .collect::<Vec<_>>()
-        .join(", ");
-
-        format!("{ev_name}({args_description})")
-    }
 }
+ */
 
 /*
 // Represents a task

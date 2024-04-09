@@ -56,3 +56,4 @@ openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git", branc
 
 [build-dependencies]
 tonic-build = { version = "0.10.2", default-features = false, features = ["prost"] }
+prost-build = "0.12.3"
