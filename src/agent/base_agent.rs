@@ -83,6 +83,8 @@ impl AgentWorker {
         let (transcriber_input_tx, transcriber_input_rx) = voice_transcription::channel();
 
         let _input_tx = input_tx.clone();
+        // TODO: Rework with new Bevy implementation
+        /*
         let task = tokio::task::spawn(async move {
             let mut transcriber_output_rx = transcriber.transcribe_stream(16000, transcriber_input_rx, _agent_token.clone()).await.expect("Transcription error");
 
@@ -109,7 +111,7 @@ impl AgentWorker {
                 }
             }
         });
-
+ */
         let asset_cache = Arc::new(Mutex::new(AssetCache::new()));
 
         let _self = Self {
@@ -132,7 +134,8 @@ impl AgentWorker {
         let _output_tx = output_tx.clone();
         let _asset_cache = asset_cache.clone();
         let _agent_token = agent_token.clone();
-        
+              // TODO: Rework with new Bevy implementation
+        /*
         tokio::task::spawn(async move {
             while let Ok(ev) = voice_rx.recv().await {
 
@@ -170,11 +173,12 @@ impl AgentWorker {
                 }
             }
         });
-
+*/
         //let _output_tx = output_rx.clone();
         let _asset_cache = asset_cache.clone();
         let _agent_token = agent_token.clone();
-
+      // TODO: Rework with new Bevy implementation
+        /*
         tokio::task::spawn(async move {
             let synthesizer = Arc::new(PiperSynthesizer::new());
 
@@ -222,7 +226,7 @@ impl AgentWorker {
                 }
             }
         });
-        
+        */
         println!("Initialized agent.");
 
         _self

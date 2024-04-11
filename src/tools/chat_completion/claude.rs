@@ -6,7 +6,7 @@ use crate::prelude::*;
 
 use anthropic::client::Client;
 use anthropic::config::AnthropicConfig;
-use anthropic::types::{CreateMessageRequestBuilder, StopReason};
+use anthropic::types::{MessagesRequest, MessagesRequestBuilder, StopReason};
 use anthropic::{AI_PROMPT, HUMAN_PROMPT};
 
 use tokio_stream::StreamExt;
@@ -34,7 +34,7 @@ impl ChatCompleter for Claude {
 
         let client = Client::try_from(cfg)?;
 
-        let create_message_request = CreateMessageRequestBuilder::default()
+        let message_request = MessagesRequestBuilder::default()
         .model("claude-3".to_string())
         //.max_tokens_to_sample(256usize)
         .stream(true)
@@ -42,7 +42,7 @@ impl ChatCompleter for Claude {
         .build()?;
 
         // Send a completion request.
-        let mut stream = client.create_message_stream(create_message_request).await?;
+        let mut stream = client.messages_stream(message_request).await?;
 
         let stream = stream.map(|x| {
             match x {

@@ -41,7 +41,7 @@ prost = "0.12.1"
 
 [target.'cfg(not(target_arch = "xtensa"))'.dependencies]
 reqwest = { version = "0.11.13", features = ["json", "stream"] }
-anthropic = { git = "https://github.com/Catchawink/anthropic-rs.git", default-features = false }
+anthropic = { git = "https://github.com/Philipp-M/anthropic-rs.git", branch = "messages-api", default-features = false }
 
 [target.'cfg(all(not(target_arch = "xtensa"), not(target_arch = "wasm32")))'.dependencies]
 openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git", branch = "streaming" }
