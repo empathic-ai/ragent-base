@@ -36,12 +36,21 @@ where
     // We no longer need a custom clone method since Arc will handle it for us
 }
 
+pub trait CreateTaskFunc: Fn(Vec<String>) -> Result<UserEventType> + Send + Sync {}
+// We implement this trait for any function that matches the signature and is 'static, Clone, Send, and Sync
+impl<T> CreateTaskFunc for T
+where
+    T: 'static + Fn(Vec<String>) -> Result<UserEventType> + Clone + Send + Sync,
+{
+    // We no longer need a custom clone method since Arc will handle it for us
+}
+
 #[derive(Clone)]
 pub struct TaskConfig {
     pub name: String,
     pub description: String,
     pub parameters: Vec<Parameter>,
-    pub create_task: Arc<dyn CloneBoxedFunc>,
+    pub create_task: Arc<dyn CreateTaskFunc>,
     pub is_available: bool
 }
 
@@ -52,7 +61,7 @@ pub struct Parameter {
 }
 
 impl TaskConfig {
-    pub fn new<T>(is_available: bool) -> TaskConfig where T: Task {
+    pub fn new<T>(is_available: bool) -> TaskConfig where T: Task + Typed {
         let docs = T::DOCS;
         let mut parameters = Vec::<Parameter>::new();
         
@@ -75,8 +84,9 @@ impl TaskConfig {
             name: get_event_name::<T>(),
             description: docs.to_string(),
             parameters: parameters,
-            create_task: Arc::new(|name: String, args: Vec<String>| {
-                create_task::<T>(name, args)
+            create_task: Arc::new(|args: Vec<String>| {
+                UserEventType::from::<T>(args)
+                //create_task::<T>(name, args)
             }),
             is_available
         }

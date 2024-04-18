@@ -16,9 +16,18 @@ use anyhow::{Result, anyhow};
 use common::prelude::*;
 use empathic_audio::*;
 use bevy::prelude::*;
+use bevy::tasks::{block_on, futures_lite::future, AsyncComputeTaskPool, Task};
+use async_compat::{Compat, CompatExt};
 
 #[derive(Component)]
 pub struct AgentWorker {
+    pub user_id: Thing,
+    pub state: Arc<Mutex<AgentState>>
+}
+
+pub struct AgentState {
+    pub user_id: Thing,
+    pub space_id: Thing,
     pub transcriber: Option<Box<dyn Transcriber>>,
     pub synthesizer: Option<Box<dyn Synthesizer>>,
     pub chat_completer: Box<dyn ChatCompleter>,
@@ -30,13 +39,12 @@ pub struct AgentWorker {
     pub current_token: Option<CancellationToken>,
     pub input_tx: Sender<UserEvent>,
     pub input_rx: Receiver<UserEvent>,
-    pub transcriber_tx: tokio::sync::broadcast::Sender<Bytes>,
     pub asset_cache: Arc<Mutex<AssetCache>>,
-    pub agent_token: CancellationToken
+    pub agent_token: CancellationToken,
 }
 
 impl AgentWorker {
-    pub fn new(agent_id: Thing, config: AgentConfig) -> Self {
+    pub async fn new(user_id: Thing, space_id: Thing, config: AgentConfig) -> Self {
             
         let system_prompt = config.description.clone();
 
@@ -63,7 +71,7 @@ impl AgentWorker {
 
         //let _self = Arc::new(Mutex::new(self));
 
-        //let _input_rx = input_rx.clone();
+        let _input_rx = input_rx.clone();
         /*
         tokio::spawn(async move {
             while let Ok(user_task) = _input_rx.recv().await {
@@ -78,31 +86,38 @@ impl AgentWorker {
         let agent_token = CancellationToken::new();
         let _agent_token = agent_token.clone();
         
-        let mut transcriber = WhisperTranscriber::new();
+        //let mut transcriber = WhisperTranscriber::new();
+        let mut transcriber = DeepgramTranscriber::new_from_env();
 
-        let (transcriber_input_tx, transcriber_input_rx) = voice_transcription::channel();
+        let (transcriber_input_tx, transcriber_input_rx) = tokio::sync::broadcast::channel::<Bytes>(64);//voice_transcription::channel();
 
         let _input_tx = input_tx.clone();
         // TODO: Rework with new Bevy implementation
         /*
         let task = tokio::task::spawn(async move {
-            let mut transcriber_output_rx = transcriber.transcribe_stream(16000, transcriber_input_rx, _agent_token.clone()).await.expect("Transcription error");
+);
+ */
+
+        let _space_id = space_id.clone();
+        tokio::task::spawn(async move {
+            
+            let mut transcriber_output_rx = transcriber.transcribe_stream(8000, transcriber_input_rx, _agent_token.clone()).await.expect("Transcription error");
 
             // Using Handle::block_on to run async code in the new thread.
             while let Some(ev) = transcriber_output_rx.next().await {
-
+                let _space_id = _space_id.clone();
                 if _agent_token.is_cancelled() {
                     continue;
                 }
-
+    
                 match ev {
                     Ok(ev) => {
                         if !ev.trim_start().trim_end().is_empty() {
-                            println!("Sending transcription result to agent!");
+                            //println!("Sending transcription result to agent!");
                     
                             let ev = UserEventType::SpeakEvent(SpeakEvent { text: ev });
-
-                            _input_tx.send(UserEvent::new("".to_string(), ev)).await.expect("Failed to send speak event");
+    
+                            _input_tx.send(UserEvent::new(Thing { id: "".to_string() }, _space_id, ev)).await.expect("Failed to send speak event");
                         }
                     },
                     Err(err) => {
@@ -111,13 +126,14 @@ impl AgentWorker {
                 }
             }
         });
- */
-        let asset_cache = Arc::new(Mutex::new(AssetCache::new()));
 
-        let _self = Self {
+        let asset_cache = Arc::new(Mutex::new(AssetCache::new()));
+        let state = Arc::new(Mutex::new(AgentState {
+            user_id: user_id.clone(),
+            space_id: space_id.clone(),
             synthesizer: None,
             transcriber: None,
-            chat_completer: Box::new(llama::Llama::new()),
+            chat_completer: Box::new(ChatGPT::new_from_env()),
             messages: messages,
             functions: functions,
             output_tx: output_tx.clone(),
@@ -126,23 +142,42 @@ impl AgentWorker {
             current_token: None,
             input_tx: input_tx,
             input_rx: input_rx,
-            transcriber_tx: transcriber_input_tx,
             asset_cache: asset_cache.clone(),
-            agent_token: agent_token.clone()
+            agent_token: agent_token.clone(),
+        }));
+
+        let _state = state.clone();
+
+
+        tokio::task::spawn(async move {
+            while let Ok(ev) = _input_rx.recv().await {
+                if let Some(UserEventType::SpeakBytesEvent(args)) = ev.user_event_type {
+                    //println!("Received audio: {}", args.data.len());
+                    transcriber_input_tx.send(Bytes::from_iter(args.data)).unwrap();
+                } else {
+                    _state.lock().await.process_user_event(ev).await;
+                }
+            }
+        });
+
+        let _self = Self {
+            user_id: user_id.clone(),
+            state: state
         };
 
         let _output_tx = output_tx.clone();
         let _asset_cache = asset_cache.clone();
         let _agent_token = agent_token.clone();
-              // TODO: Rework with new Bevy implementation
-        /*
+
+        let _space_id = space_id.clone();
+        // TODO: Rework with new Bevy implementation
         tokio::task::spawn(async move {
             while let Ok(ev) = voice_rx.recv().await {
 
                 if _agent_token.is_cancelled() {
                     continue;
                 }
-                
+                let _space_id = _space_id.clone();
                 //let token = ev.token.clone();
 
                 //if token.is_cancelled() {
@@ -161,7 +196,7 @@ impl AgentWorker {
                         let bytes = asset.bytes.to_vec();
                         
                         //ev.user_id
-                        _output_tx.send(UserEvent::new(ev.user_id, UserEventType::SpeakBytesEvent(SpeakBytesEvent { data: bytes }))).unwrap();//.await;
+                        _output_tx.send(UserEvent::new(ev.user_id.unwrap(), _space_id, UserEventType::SpeakBytesEvent(SpeakBytesEvent { data: bytes }))).unwrap();//.await;
 
                         //audio_output_tx.send(asset.bytes).await;
 
@@ -173,19 +208,21 @@ impl AgentWorker {
                 }
             }
         });
-*/
+        
         //let _output_tx = output_rx.clone();
+        let _space_id = space_id.clone();
         let _asset_cache = asset_cache.clone();
         let _agent_token = agent_token.clone();
-      // TODO: Rework with new Bevy implementation
-        /*
         tokio::task::spawn(async move {
-            let synthesizer = Arc::new(PiperSynthesizer::new());
+            let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
+            //let synthesizer = Arc::new(PiperSynthesizer::new());
 
             while let Ok(ev) = output_rx.recv().await {
 
+                let _space_id = _space_id.clone();
+
                 let ev_description = ev.get_event_description().unwrap();
-                log(format!("Processing event elsewhere: {}", ev_description));        
+                //log(format!("Processing event elsewhere: {}", ev_description));        
 
                 if _agent_token.is_cancelled() {
                     continue;
@@ -222,35 +259,40 @@ impl AgentWorker {
             
                     asset_cache.lock().await.load_asset(asset_id.clone(), load_func, false).await.expect("Asset load error");
             
-                    voice_tx.send(UserEvent::new(user_id, UserEventType::SpeakResultEvent(SpeakResultEvent{ asset_id: asset_id}))).await;
+                    voice_tx.send(UserEvent::new(user_id.unwrap(), _space_id, UserEventType::SpeakResultEvent(SpeakResultEvent{ asset_id: asset_id}))).await;
                 }
             }
         });
-        */
         println!("Initialized agent.");
 
         _self
     }
+
+    pub async fn input_event(&mut self, task: UserEvent) -> Result<()> {
+        self.state.lock().await.input_event(task).await
+    }
+
+    pub async fn try_recv_event(&mut self) -> Result<UserEvent> {
+        self.state.lock().await.try_recv_event().await
+    }
 }
 
 #[async_trait]
-impl Agent for AgentWorker {
+impl Agent for AgentState {
+    fn get_user_id(&self) -> Thing {
+        self.user_id.clone()
+    }
+    
+    fn get_space_id(&self) -> Thing {
+        self.space_id.clone()
+    }
+
     async fn stop(&mut self) -> Result<()> {
         self.agent_token.cancel();
         Ok(())
     }
     
     async fn process(&mut self) -> Result<()> {
-        if let Ok(ev) = self.input_rx.try_recv() {
-            //let __self = _self.clone();
-            //tokio::spawn(async move {
-            if let Some(UserEventType::SpeakBytesEvent(args)) = ev.user_event_type {
-                self.transcriber_tx.send(Bytes::from_iter(args.data)).unwrap();
-            } else {
-                self.process_user_event(ev).await;
-            }
-            //});
-        }
         Ok(())
     }
 
@@ -281,7 +323,7 @@ impl Agent for AgentWorker {
                     let content = x.completion;
                     text_tasks += &content.clone();
                     full_response += &content;
-                    println!("{}", full_response);
+                    //println!("{}", full_response);
 
                     text_tasks = self.output_tasks(text_tasks, false, token.clone()).await;
                     if token.is_cancelled() {

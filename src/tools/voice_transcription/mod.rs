@@ -26,7 +26,7 @@ pub type transcriber_sender = Sender<Bytes>;
 pub type transcriber_receiver = Receiver<String>;
 
 pub fn channel() -> (Sender<Bytes>, Receiver<Bytes>) {
-    broadcast::channel(16)
+    broadcast::channel(64)
 }
 
 #[async_trait]

@@ -34,12 +34,19 @@ impl ChatCompleter for ChatGPT {
         //GPT3_5_TURBO
         //GPT4_0613
 
-        let mut messages: Vec<_> = messages.into_iter().map(|x| {
+        let mut messages: Vec<_> = messages.into_iter().map(|message| {
+
+            dbg!(message.clone());
             openai_api_rs::v1::chat_completion::ChatCompletionMessage {
-                role: todo!(),
-                content: todo!(),
-                name: todo!(),
-                function_call: todo!()
+                role: match message.role {
+                    chat_completion::MessageRole::user =>  openai_api_rs::v1::chat_completion::MessageRole::user,
+                    chat_completion::MessageRole::system =>  openai_api_rs::v1::chat_completion::MessageRole::system,
+                    chat_completion::MessageRole::assistant =>  openai_api_rs::v1::chat_completion::MessageRole::assistant,
+                    chat_completion::MessageRole::function =>  openai_api_rs::v1::chat_completion::MessageRole::function,
+                },
+                content: message.content,
+                name: message.name,
+                function_call: None
             }
         }).collect();
 
@@ -98,7 +105,7 @@ impl ChatCompleter for ChatGPT {
             match x {
                 Ok(x) => {
                     Ok(super::ChatCompletionResponse {
-                        completion: x.choices[0].delta.content.clone().unwrap()
+                        completion: x.choices[0].delta.content.clone().unwrap_or("".to_string())
                     })
                 },
                 Err(e) => {

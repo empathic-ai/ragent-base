@@ -74,7 +74,8 @@ message VoiceStreamRequest {
 
 // This is a test comment.
 message UserEvent {
-  string user_id = 1;
+  Thing user_id = 1;
+  Thing space_id = 2;
   // This is a test comment.
   oneof user_event_type {
     SpeakBytesEvent speak_bytes_event = 100;

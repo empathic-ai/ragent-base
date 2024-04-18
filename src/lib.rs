@@ -8,11 +8,12 @@ pub mod service {
 
 use std::any::Any;
 
-use prelude::{get_event_name_from_type_name, SpeakEvent};
+use prelude::{get_event_name, get_event_name_from_type_name, SpeakEvent};
 pub use ragent_core;
 pub use ragent_derive;
-
-use bevy::reflect::{DynamicStruct, DynamicTypePath, DynamicVariant, Enum, Reflect, ReflectRef, TypeInfo, TypePath, TypeRegistration, TypeRegistry, VariantInfo};
+use bevy::prelude::FromReflect;
+use bevy::reflect::{DynamicEnum, DynamicTuple, DynamicTupleStruct, TypeData};
+use bevy::reflect::{DynamicStruct, DynamicTypePath, DynamicVariant, Enum, Reflect, ReflectRef, TypeInfo, TypePath, Typed, TypeRegistration, ReflectFromReflect, TypeRegistry, VariantInfo};
 use serde::{Deserialize, Serialize};
 pub use crate::service::user_event::UserEventType;
 pub use crate::service::UserEvent;
@@ -25,6 +26,8 @@ pub mod tasks;
 pub mod asset_cache;
 pub mod tools;
 
+use ragent_core::prelude::*;
+
 pub mod prelude {
     pub use crate::agent::*;
     pub use crate::config::*;
@@ -35,45 +38,44 @@ pub mod prelude {
     pub use crate::ragent_core::prelude::*;
     pub use crate::tools::*;
 
-    pub use crate::Thing;
-
     pub use crate::UserEventType;
     pub use crate::UserEvent;
     pub use crate::service::*;
 }
 
-#[derive(Serialize, Deserialize, Reflect, Clone, PartialEq, ::prost::Message)]
-pub struct Thing {
-    #[prost(string, tag = "1")]
-    pub id: ::prost::alloc::string::String
-}
+
 
 impl UserEventType {
-    pub fn from(event_name: String, event_args: Vec<String>) -> Result<UserEventType> {
-        let event_type: Option<UserEventType> = None;
-        let type_registry = TypeRegistry::default();
-        if let Some(type_registration) = type_registry.get_with_type_path(UserEventType::type_path()) {
-            if let TypeInfo::Enum(enum_info) = type_registration.type_info() {
-                let variant_name = enum_info.variant_names().iter().find(|x| get_event_name_from_type_name(x) == event_name).unwrap();
-        
-                if let Some(VariantInfo::Struct(struct_variant_info)) = enum_info.variant(variant_name) {
-                    println!("{}", struct_variant_info.name());
-                    /*
+    pub fn from<T>(event_args: Vec<String>) -> Result<UserEventType> where T: Task + Typed {
+        let event_name = get_event_name::<T>();
+
+        if let TypeInfo::Enum(enum_info) = UserEventType::type_info() {
+            let variant_name = *enum_info.variant_names().iter().find(|x| get_event_name_from_type_name(x) == event_name).unwrap();
+            //println!("Variant name: {}", variant_name);
+            
+            if let Some(VariantInfo::Tuple(variant_info)) = enum_info.variant(variant_name.clone()) {
+                //println!("{}", variant_info.name());
+                if let TypeInfo::Struct(struct_info) = T::type_info() {
+                    let mut tuple = DynamicTuple::default();
+
                     let mut data = DynamicStruct::default();
                     for i in 0..event_args.len() {
-                        let field = struct_variant_info.field_at(i).expect("Failed to find field at index");
+                        let field = struct_info.field_at(i).expect("Failed to find field at index");
                         data.insert(field.name(), event_args[i].clone());
                     }
-        
+    
                     data.set_represented_type(Some(T::type_info()));
-                    //let task = data.clone_value();
-                    //T::take_from_reflect(reflect)
-                    let task = T::from_reflect(&data).unwrap();
-                    //return Ok(Dynamic::new(task));
-                    DynamicVariant::Struct(data);
-                    let _event_type = UserEventType::SpeakEvent(SpeakEvent::default());
-                    _event_type.apply();
-                    */
+    
+                    tuple.insert_boxed(data.clone_value());
+    
+                    let dynamic_variant = DynamicVariant::Tuple(tuple);
+    
+                    let mut dynamic_enum = DynamicEnum::default();
+                    dynamic_enum.set_variant(variant_name, dynamic_variant);
+    
+                    dynamic_enum.set_represented_type(Some(UserEventType::type_info()));
+
+                    return Ok(UserEventType::from_reflect(dynamic_enum.as_reflect()).unwrap());
                 }
             }
         }
@@ -96,12 +98,79 @@ impl UserEventType {
         Err(anyhow!("Failed to create task"))
          */
     }
+
+    // Missing struct info inside TupleVariantInfo. Would need to modify Bevy reflect crate to possibly fix
+    /*
+    pub fn from(event_name: String, event_args: Vec<String>) -> Result<UserEventType> {
+        let event_type: Option<UserEventType> = None;
+
+        println!("Event name: {}", event_name);
+
+        if let TypeInfo::Enum(enum_info) = UserEventType::type_info() {
+            let variant_name = enum_info.variant_names().iter().find(|x| get_event_name_from_type_name(x) == event_name).unwrap();
+            println!("Variant name: {}", variant_name);
+            
+
+            if let Some(VariantInfo::Tuple(variant_info)) = enum_info.variant(variant_name) {
+                println!("{}", variant_info.name());
+                let field = variant_info.field_at(0).unwrap();
+                
+                let tuple = DynamicTuple::default();
+
+                
+                
+     
+                let mut data = DynamicStruct::default();
+                for i in 0..event_args.len() {
+                    let field = variant_info.field_at(i).expect("Failed to find field at index");
+                    data.insert(field.name(), event_args[i].clone());
+                }
+
+                tuple.insert_boxed(data.clone_value());
+
+                DynamicVariant::Tuple(tuple);
+
+                
+                UserEventType::from_reflect();
+    
+                //data.set_represented_type(Some(T::type_info()));
+                //let task = data.clone_value();
+                //T::take_from_reflect(reflect)
+                //let task = T::from_reflect(&data).unwrap();
+                //return Ok(Dynamic::new(task));
+                DynamicVariant::Struct(data);
+                let _event_type = UserEventType::SpeakEvent(SpeakEvent::default());
+                _event_type.apply();
+
+            }
+        }
+        return Err(anyhow!("Failed to create task from name and arguments!"));
+   
+
+        /*
+        if let TypeInfo::Struct(struct_info) = T::type_info() {
+            let mut data = DynamicStruct::default();
+            for i in 0..args.len() {
+                let field = struct_info.field_at(i).expect("Failed to find field at index");
+                data.insert(field.name(), args[i].clone());
+            }
+            data.set_represented_type(Some(T::type_info()));
+            //let task = data.clone_value();
+            //T::take_from_reflect(reflect)
+            let task = T::from_reflect(&data).unwrap();
+            return Ok(Dynamic::new(task));
+        }
+        Err(anyhow!("Failed to create task"))
+         */
+    }
+    */
 }
 
 impl UserEvent {
-    pub fn new(user_id: String, ev: UserEventType) -> Self{
+    pub fn new(user_id: Thing, space_id: Thing, ev: UserEventType) -> Self{
         UserEvent {
-            user_id,
+            user_id: Some(user_id),
+            space_id: Some(space_id),
             user_event_type: Some(ev)
             //args: task,
             //created_time: Some(SystemTime::now())
@@ -112,8 +181,7 @@ impl UserEvent {
         
         if let Some(event_type) = self.user_event_type.as_ref() {
             if let ReflectRef::Enum(enum_ref) = event_type.as_reflect().reflect_ref() {
-                let type_registry = TypeRegistry::default();
-                if let TypeInfo::Enum(enum_info) = type_registry.get_type_info(event_type.type_id()).unwrap() {
+                if let TypeInfo::Enum(enum_info) = UserEventType::type_info() {
                     if let Some(variant_info) = enum_info.variant_at(enum_ref.variant_index()) {
                         let variant_name = get_event_name_from_type_name(variant_info.name());
                         return Ok(variant_name.to_string());
@@ -134,7 +202,7 @@ impl UserEvent {
         if let Some(event_type) = self.user_event_type.as_ref() {
             if let ReflectRef::Enum(enum_ref) = event_type.as_reflect().reflect_ref() {
 
-                if let Some(variant) = enum_ref.field_at(enum_ref.variant_index()) {
+                if let Some(variant) = enum_ref.field_at(0) {
                     if let ReflectRef::Struct(args) = variant.reflect_ref() {
                         for field in args.iter_fields() {
                             if let Some(field) = field.downcast_ref::<String>() {

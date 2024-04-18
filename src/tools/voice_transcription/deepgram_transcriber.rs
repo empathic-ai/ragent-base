@@ -49,6 +49,7 @@ impl Transcriber for DeepgramTranscriber {
 
         //println!("Getting Deepgram stream...");
         let _token = token.clone();
+        
         tokio::task::spawn(async move {
             loop {
                 let _token = _token.clone();
@@ -132,7 +133,7 @@ impl Transcriber for DeepgramTranscriber {
                         }
                     }
                 } else {
-                    panic!("Failed to get Deepgram transcription!");
+                    println!("ERROR: Failed to get Deepgram transcription!");
                     break;
                 }
             }

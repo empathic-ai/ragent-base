@@ -23,8 +23,12 @@ lazy_static! {
         map.insert("old-woman".to_string(), "GamzzeOsatMbpvYvKdVx".to_string());
         map.insert("deep-man".to_string(), "5rnzAtDpoJXVGo8Td3mO".to_string());
         map.insert("raspy-man".to_string(), "t0jbNlBVZ17f02VDIeMI".to_string());
+        //map.insert("smexy-frog".to_string(), "TJ5lH6wsCvZ2alDg7xrH".to_string());
+        // Old smexy frog voice, more gritty
         map.insert("smexy-frog".to_string(), "N2lVS1w4EtoT3dr4eOWO".to_string());
-        map.insert("anatra".to_string(), "F9UvutjrG9l2yvDB2zSt".to_string());
+        map.insert("anatra".to_string(),"gkvpzrzujkR7osK9HAgg".to_string());
+        // Old anatra voice
+        //map.insert("anatra".to_string(), "F9UvutjrG9l2yvDB2zSt".to_string());
         map
     };
 }
@@ -85,11 +89,12 @@ impl Synthesizer for ElevenLabsSynthesizer {
         //    }
         //}
 
+        // Model options: eleven_multilingual_v2, eleven_turbo_v2
         let response = client
             .post(
                 format!("https://api.elevenlabs.io/v1/text-to-speech/{}/stream?output_format={}", voice_id, self.format)
             )
-            .json(&VoiceStreamRequest { text: text.clone(), model_id: "eleven_multilingual_v2".to_string(), optimize_streaming_latency: 2 })
+            .json(&VoiceStreamRequest { text: text.clone(), model_id: "eleven_turbo_v2".to_string(), optimize_streaming_latency: 1 })
             //.json(&format!("{{\"voicemodel_uuid\": \"{voice_uuid}\", \"pace\": {pace}, \"speech\": \"{speech}\"}}"))
             //.header("Authorization", format!("Bearer {}", self.access_token))
             .headers(headers)

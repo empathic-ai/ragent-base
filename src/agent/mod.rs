@@ -153,9 +153,8 @@ pub fn get_task_configs_description(task_configs: Vec<TaskConfig>) -> String {
 #[async_trait]
 pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
 
-    fn get_user_id(&self) -> String {
-        Uuid::new_v4().to_string()
-    }
+    fn get_user_id(&self) -> Thing;
+    fn get_space_id(&self) -> Thing;
 
     /*
     fn new_event(&self, task: Dynamic) -> UserEvent {
@@ -461,12 +460,12 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
         //let _self = Arc::clone(&self);
 
         if !self.get_config().task_configs_by_name.contains_key(&ev.get_event_name()?) {
+            println!("Task doesn't exist in agent config!");
             return Ok(());
         }
 
         if let Some(token) = self.get_current_token() {
             token.cancel();
-            println!("CANCELLED RESPONSE!");
         }
         let token = CancellationToken::new();
         self.set_current_token(Some(token.clone()));
@@ -481,7 +480,7 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
         
         //println!("Processing prompt: {}", prompt_text);
 
-        let role = if ev.user_id == user_id {
+        let role = if ev.user_id.clone().unwrap() == user_id {
             Role::Agent
         } else {
             Role::Human
@@ -491,7 +490,7 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
         //    println!("{:?}: {}", message.role.unwrap(), message.content.unwrap());
         //}
 
-        if ev.user_id == user_id {
+        if ev.user_id.unwrap() == user_id {
             return Ok(());
         }
 
@@ -551,9 +550,9 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
         //log(format!("SENDING RESPONSE: {name}({args_description})"));
 
         if let Some(task_config) = self.get_config().task_configs_by_name.get(&name) {
-            let event_type = UserEventType::from(name, arguments)?;
+            let event_type = (task_config.create_task)(arguments)?;
 
-            let ev = UserEvent::new(self.get_user_id().clone(), event_type);
+            let ev = UserEvent::new(self.get_user_id().clone(), self.get_space_id().clone(), event_type);
             self.new_message(Role::Agent, ev.get_event_description()?);
             self.output_event(ev.clone()).await?;
             Ok(())

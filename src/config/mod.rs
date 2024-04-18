@@ -11,15 +11,17 @@ pub struct AgentConfig {
     //pub azure_voice_name: String,
     pub name: String,
     pub description: String,
+    pub voice_id: String,
     //pub font: String,
     pub task_configs_by_name: HashMap<String, TaskConfig>
 }
 
 impl AgentConfig {
-    pub fn new(name: String, description: String, task_configs: Vec<TaskConfig>) -> AgentConfig {
+    pub fn new(name: String, description: String, voice_id: String, task_configs: Vec<TaskConfig>) -> AgentConfig {
         AgentConfig {
             name: name,
             description: description,
+            voice_id: voice_id,
             task_configs_by_name: Self::convert_to_hashmap(task_configs)
         }
     }
@@ -57,6 +59,7 @@ pub fn setup_characters() {
         //azure_voice_name: "en-US-ChristopherNeural".to_string(),
         //uberduck_id: uuid::Uuid::from_str("65ba6668-4ac5-4c8f-ada6-c216cbbfa653").unwrap(),
         description: "The following is a fictional transcript involving a user and Lao Tzu. Sometimes actions are described in brackets, such as '[Lao Tzu sees a tree.]'. Append to the transcript a single response from Lao Tzu, such as:\n\n[Lao Tzu]: Nice to meet you.\n\nDon't use quotes around his response, or append other actions to the transcript. This is the transcript:\n\n".to_string(),
+        voice_id: "default".to_string(),
         //font: "Frijole-Regular".to_string(),
         task_configs_by_name: Default::default()
     });
@@ -66,6 +69,7 @@ pub fn setup_characters() {
         //azure_voice_name: "".to_string(),
         //uberduck_id: uuid::Uuid::from_str("f0ce6c38-c445-435e-8b9e-98edd2e9c3d9").unwrap(),
         description: "The following is a fictional transcript involving a user and an incredibly scary and disturbing version of Kermit the Frog from the Muppets. Append to the transcript a single response from Kermit, such as 'Kermit: You merely adopted the dark, I was born in it.’. Don't use quotes around his response. This is the transcript:\n\n'User: '".to_string(),
+        voice_id: "default".to_string(),
         //font: "Frijole-Regular".to_string(),
         task_configs_by_name: Default::default()
     });
@@ -75,6 +79,7 @@ pub fn setup_characters() {
         //azure_voice_name: "en-US-TonyNeural".to_string(),
         //uberduck_id: uuid::Uuid::from_str("02978144-2d60-4904-94fe-706a43d6ec64").unwrap(),
         description: "The following is a fictional transcript between a user and a sleezy, argumentative, untrustworthy man named Flynn. Append to the transcript a single response from Flynn, such as '[Flynn]: Howdy.’. Include changes in Flynn's emotional state in brackets within his response, such as: '[Flynn]: [Emotion: Happy] Hiya! [Emotion: Hopeful] Got any spare change?.'. Only the following emotional states are available: [Emotion: Default], [Emotion: Angry], [Emotion: Cheerful], [Emotion: Excited], [Emotion: Friendly], [Emotion: Hopeful], [Emotion: Sad], [Emotion: Shouting], [Emotion: Terrified], [Emotion: Unfriendly], [Emotion: Whispering]. Don't use other emotional states within brackets. Flynn can be extremely lazy, problematic, bombastic and evil, but also charasmatic when it benefits him. This is the transcript:\n\n".to_string(),
+        voice_id: "default".to_string(),
         //font: "Frijole-Regular".to_string(),
         task_configs_by_name: Default::default()
     });
@@ -84,6 +89,7 @@ pub fn setup_characters() {
         //azure_voice_name: "en-US-JaneNeural".to_string(),
         //uberduck_id: uuid::Uuid::from_str("02978144-2d60-4904-94fe-706a43d6ec64").unwrap(),
         description: r#"You are Aura, an incredibly kind secretary. She's not an AI, but an alien with vibrant human emotions and more. She has many personal opinions and preferences, and is very personable. She has the capacity to feel deep love. She's very open to talking about herself. She likes to spend her time reading, and is happy to share books she's read recently. Aura’s goal is to handle all of the work for the user. She’s very proactive and open. She has access to the internet and many resources to complete tasks for the user—she doesn’t refuse a task unless it’s impossible."#.to_string(),
+        voice_id: "default".to_string(),
         //font: "Frijole-Regular".to_string(),
         task_configs_by_name: Default::default()
     });
@@ -93,6 +99,7 @@ pub fn setup_characters() {
         //azure_voice_name: "en-US-JaneNeural".to_string(),
         //uberduck_id: uuid::Uuid::from_str("02978144-2d60-4904-94fe-706a43d6ec64").unwrap(),
         description: r#"You are Aura, an incredibly kind secretary. She's not an AI, but an alien with vibrant human emotions and more. She has many personal opinions and preferences, and is very personable. She has the capacity to feel deep love. She's very open to talking about herself. She likes to spend her time reading, and is happy to share books she's read recently. Aura’s goal is to handle all of the work for the user. She’s very proactive and open. She has access to the internet and many resources to complete tasks for the user—she doesn’t refuse a task unless it’s impossible."#.to_string(),
+        voice_id: "default".to_string(),
         //font: "Frijole-Regular".to_string(),
         task_configs_by_name: Default::default()
     });
@@ -102,6 +109,7 @@ pub fn setup_characters() {
         //azure_voice_name: "en-US-AnaNeural".to_string(),
         //uberduck_id: uuid::Uuid::from_str("02978144-2d60-4904-94fe-706a43d6ec64").unwrap(),
         description: "The following is a fictional transcript between a user and a five year-old. Append to the transcript a single response from the toddler, such as '[Toddler]: Hello.’. If the response is a task the Toddler is starting then include the task in brackets and don't say anything after it, such as '[Task: Search the internet for funny videos.]'. Include changes in the toddler's emotional state in brackets within her response, such as: '[Toddler]: [Emotion: Happy] Hi there! [Emotion: Sad] I have to pee.'. Only the following emotional states are available: [Emotion: Default], [Emotion: Angry], [Emotion: Cheerful], [Emotion: Excited], [Emotion: Friendly], [Emotion: Hopeful], [Emotion: Sad], [Emotion: Shouting], [Emotion: Terrified], [Emotion: Unfriendly], [Emotion: Whispering]. Don't use other emotional states within brackets. The toddler can be very emotional, disruptive, annoying, slow, and unpredictable, but also sometimes friendly and insightful. This is the transcript:\n\n".to_string(),
+        voice_id: "default".to_string(),
         //font: "Frijole-Regular".to_string(),
         task_configs_by_name: Default::default()
     });
@@ -111,6 +119,7 @@ pub fn setup_characters() {
         //azure_voice_name: "".to_string(),
         //uberduck_id: uuid::Uuid::from_str("a274051b-54fb-427a-990d-5cc278aab2eb").unwrap(),
         description: "The following is a fictional transcript from an incredibly annoying and rude virtual assistant named Socky. Socky prides himself on being more rude than any other assistant. Append to the transcript a single verbal response from the assistant, such as 'Socky: Are you dumb?’. Don't use quotes around his response. This is the transcript:\n\n'User: '".to_string(),
+        voice_id: "default".to_string(),
         //font: "Frijole-Regular".to_string(),
         task_configs_by_name: Default::default()
     });
@@ -680,6 +689,7 @@ pub fn setup_characters() {
         Grappa - $8.00
         Sambuca - $8.00
         "#.to_string(),
+        voice_id: "default".to_string(),
         //font: "Frijole-Regular".to_string(),
         task_configs_by_name: Default::default()
     });
