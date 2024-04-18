@@ -8,6 +8,10 @@ description = "A framework for building LLM agents."
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[features]
+default = []
+server = []
+
 [dependencies]
 ragent_core = { git = "https://github.com/empathic-ai/ragent-core.git" }
 ragent_derive = { git = "https://github.com/empathic-ai/ragent-derive.git" }

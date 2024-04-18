@@ -86,7 +86,9 @@ impl AgentWorker {
         let agent_token = CancellationToken::new();
         let _agent_token = agent_token.clone();
         
-        //let mut transcriber = WhisperTranscriber::new();
+        #[cfg(not(feature="server"))]
+        let mut transcriber = WhisperTranscriber::new();
+        #[cfg(feature="server")]
         let mut transcriber = DeepgramTranscriber::new_from_env();
 
         let (transcriber_input_tx, transcriber_input_rx) = tokio::sync::broadcast::channel::<Bytes>(64);//voice_transcription::channel();
@@ -127,13 +129,18 @@ impl AgentWorker {
             }
         });
 
+        #[cfg(not(feature="server"))]
+        let chat_completer = Llama::new();        
+        #[cfg(feature="server")]
+        let chat_completer = ChatGPT::new_from_env();
+
         let asset_cache = Arc::new(Mutex::new(AssetCache::new()));
         let state = Arc::new(Mutex::new(AgentState {
             user_id: user_id.clone(),
             space_id: space_id.clone(),
             synthesizer: None,
             transcriber: None,
-            chat_completer: Box::new(ChatGPT::new_from_env()),
+            chat_completer: Box::new(chat_completer),
             messages: messages,
             functions: functions,
             output_tx: output_tx.clone(),
@@ -214,8 +221,10 @@ impl AgentWorker {
         let _asset_cache = asset_cache.clone();
         let _agent_token = agent_token.clone();
         tokio::task::spawn(async move {
+            #[cfg(not(feature="server"))]
+            let synthesizer = Arc::new(PiperSynthesizer::new());
+            #[cfg(feature="server")]
             let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
-            //let synthesizer = Arc::new(PiperSynthesizer::new());
 
             while let Ok(ev) = output_rx.recv().await {
 
