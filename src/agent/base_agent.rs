@@ -50,6 +50,9 @@ impl AgentWorker {
 
         let mut functions = Vec::<Function>::new();
 
+        let voice_id = config.voice_id.clone();
+        let mic_sample_rate = config.mic_sample_rate.clone();
+
         let task_configs: Vec<TaskConfig> = config.task_configs_by_name.values().map(|x|x.to_owned()).collect();
 
         //println!("Initializing agent with system prompt:\n\n{}\n\n", system_prompt.clone());
@@ -103,7 +106,7 @@ impl AgentWorker {
         let _space_id = space_id.clone();
         tokio::task::spawn(async move {
             
-            let mut transcriber_output_rx = transcriber.transcribe_stream(8000, transcriber_input_rx, _agent_token.clone()).await.expect("Transcription error");
+            let mut transcriber_output_rx = transcriber.transcribe_stream(mic_sample_rate, transcriber_input_rx, _agent_token.clone()).await.expect("Transcription error");
 
             // Using Handle::block_on to run async code in the new thread.
             while let Some(ev) = transcriber_output_rx.next().await {
@@ -216,6 +219,7 @@ impl AgentWorker {
             }
         });
         
+
         //let _output_tx = output_rx.clone();
         let _space_id = space_id.clone();
         let _asset_cache = asset_cache.clone();
@@ -247,7 +251,7 @@ impl AgentWorker {
 
                 if let Some(UserEventType::SpeakEvent(args)) = ev.user_event_type {
                     //let voice_name = "smexy-frog".to_string();
-                    let voice_name = "smexy-frog".to_string();
+                    let voice_name = voice_id.clone();
                     let speech_text = args.text.clone();
                     let emotion = "default".to_string();
             

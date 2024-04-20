@@ -44,6 +44,7 @@ tonic = { version = "0.10.2", default-features = false, features = ["prost", "co
 prost = "0.12.1"
 futures-lite = "2.3.0"
 async-compat = "0.2.3"
+hound = "3.5.1"
 
 [target.'cfg(not(target_arch = "xtensa"))'.dependencies]
 reqwest = { version = "0.11.13", features = ["json", "stream"] }
