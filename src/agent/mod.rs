@@ -472,7 +472,6 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
 
         //for arg in ev.args.0.as_ref()
 
-        
         //let speech_task = ev.args.into_reflect().downcast::<SpeakEventArgs>().unwrap();
 
         let user_id = self.get_user_id();
