@@ -81,8 +81,10 @@ message UserEvent {
     SpeakBytesEvent speak_bytes_event = 100;
     SpeakEvent speak_event = 102;
     SpeakResultEvent speak_result_event = 103;
-    UserJoined user_joined = 104;
-    UserLeft user_left = 105;
+    UserJoinedEvent user_joined_event = 104;
+    UserLeftEvent user_left_event = 105;
+    ResetDeviceEvent reset_device_event = 106;
+    WaitEvent wait_event = 107;
   }
 }
 
@@ -102,10 +104,17 @@ message SpeakResultEvent {
 }
 
 // This is a test comment.
-message UserJoined {
+message UserJoinedEvent {
 }
 
 // This is a test comment.
-message UserLeft {
+message UserLeftEvent {
 }
 
+// This action resets the device the agent is running on. Only use this action if prompted to!
+message ResetDeviceEvent {
+}
+
+// Represents a non-action--used instead of any other actions if it is most appropriate to wait for further outside input before responding. ONLY use this if explicitly waiting for input from a player.
+message WaitEvent {
+}

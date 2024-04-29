@@ -40,7 +40,8 @@ pub struct AgentState {
     pub input_tx: Sender<UserEvent>,
     pub input_rx: Receiver<UserEvent>,
     pub asset_cache: Arc<Mutex<AssetCache>>,
-    pub agent_token: CancellationToken,
+    pub cancel_tx: tokio::sync::broadcast::Sender<()>
+    //pub agent_token: CancellationToken,
 }
 
 impl AgentWorker {
@@ -137,6 +138,8 @@ impl AgentWorker {
         #[cfg(feature="server")]
         let chat_completer = ChatGPT::new_from_env();
 
+        let (cancel_tx, mut cancel_rx) = tokio::sync::broadcast::channel::<()>(1);
+
         let asset_cache = Arc::new(Mutex::new(AssetCache::new()));
         let state = Arc::new(Mutex::new(AgentState {
             user_id: user_id.clone(),
@@ -153,11 +156,10 @@ impl AgentWorker {
             input_tx: input_tx,
             input_rx: input_rx,
             asset_cache: asset_cache.clone(),
-            agent_token: agent_token.clone(),
+            cancel_tx: cancel_tx
         }));
 
         let _state = state.clone();
-
 
         tokio::task::spawn(async move {
             while let Ok(ev) = _input_rx.recv().await {
@@ -216,69 +218,75 @@ impl AgentWorker {
                         //AudioManager::start_playing(bytes.to_vec()).await;
                     }
                 }
-            }
+            } 
         });
         
-
-        //let _output_tx = output_rx.clone();
-        let _space_id = space_id.clone();
-        let _asset_cache = asset_cache.clone();
-        let _agent_token = agent_token.clone();
         tokio::task::spawn(async move {
-            #[cfg(not(feature="server"))]
-            let synthesizer = Arc::new(PiperSynthesizer::new());
-            #[cfg(feature="server")]
-            let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
-
-            while let Ok(ev) = output_rx.recv().await {
-
-                let _space_id = _space_id.clone();
-
-                let ev_description = ev.get_event_description().unwrap();
-                //log(format!("Processing event elsewhere: {}", ev_description));        
-
-                if _agent_token.is_cancelled() {
-                    continue;
-                }
-
-                let user_id = ev.user_id;
-                //let args = ev.args;
-                //let token = ev.token;
-
-                //if token.is_cancelled() {
-                //    continue;
-                //}
-
-                if let Some(UserEventType::SpeakEvent(args)) = ev.user_event_type {
-                    //let voice_name = "smexy-frog".to_string();
-                    let voice_name = voice_id.clone();
-                    let speech_text = args.text.clone();
-                    let emotion = "default".to_string();
-            
-                    let _speech_text = speech_text.clone();
-            
-                    let synthesizer = synthesizer.clone();
-                    let load_func = async move {
-                        let result = synthesizer.create_speech(emotion, voice_name, _speech_text.clone()).await?;
-            
-                        let bytes = result.bytes.to_vec();
-                        let bytes = samples_to_wav(1, 24000, 16, bytes);
-                        Ok(crate::asset_cache::Asset::new(bytes))
-                    };
-
-                    let asset_id = Uuid::new_v4().to_string();
-            
-                    //let user_id = self.agent.get_user_id().clone();
-            
-                    asset_cache.lock().await.load_asset(asset_id.clone(), load_func, false).await.expect("Asset load error");
-            
-                    voice_tx.send(UserEvent::new(user_id.unwrap(), _space_id, UserEventType::SpeakResultEvent(SpeakResultEvent{ asset_id: asset_id}))).await;
+            tokio::select! {
+                _ = Self::run_synthesizer(output_rx, space_id.clone(), voice_id.clone(), asset_cache.clone(), voice_tx.clone()) => {
+  
+                },
+                _ = cancel_rx.recv() => {
+                    println!("Cancelled agent!")
                 }
             }
         });
         println!("Initialized agent.");
 
         _self
+    }
+
+    async fn run_synthesizer(mut output_rx: tokio::sync::broadcast::Receiver<UserEvent>, space_id: Thing, voice_id: String, asset_cache: Arc<Mutex<AssetCache>>, voice_tx: async_channel::Sender<UserEvent>) {
+        #[cfg(not(feature="server"))]
+        let synthesizer = Arc::new(PiperSynthesizer::new());
+        #[cfg(feature="server")]
+        let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
+
+        while let Ok(ev) = output_rx.recv().await {
+
+            let _space_id = space_id.clone();
+
+            let ev_description = ev.get_event_description().unwrap();
+            //log(format!("Processing event elsewhere: {}", ev_description));        
+
+            let user_id = ev.user_id;
+            //let args = ev.args;
+            //let token = ev.token;
+
+            //if token.is_cancelled() {
+            //    continue;
+            //}
+
+            if let Some(UserEventType::SpeakEvent(args)) = ev.user_event_type {
+                //let voice_name = "smexy-frog".to_string();
+                let voice_name = voice_id.clone();
+                let speech_text = args.text.clone();
+                let emotion = "default".to_string();
+        
+                let _speech_text = speech_text.clone();
+        
+                let synthesizer = synthesizer.clone();
+                let load_func = async move {
+                    let result = synthesizer.create_speech(emotion, voice_name, _speech_text.clone()).await?;
+        
+                    let bytes = result.bytes.to_vec();
+                    let bytes = samples_to_wav(1, 24000, 16, bytes);
+                    Ok(crate::asset_cache::Asset::new(bytes))
+                };
+
+                let asset_id = Uuid::new_v4().to_string();
+        
+                //let user_id = self.agent.get_user_id().clone();
+        
+                asset_cache.lock().await.load_asset(asset_id.clone(), load_func, false).await.expect("Asset load error");
+        
+                voice_tx.send(UserEvent::new(user_id.unwrap(), _space_id, UserEventType::SpeakResultEvent(SpeakResultEvent{ asset_id: asset_id}))).await;
+            }
+        }
+    }
+
+    pub async fn stop(&self) -> Result<()> {
+        self.state.lock().await.stop().await
     }
 
     pub async fn input_event(&mut self, task: UserEvent) -> Result<()> {
@@ -301,7 +309,7 @@ impl Agent for AgentState {
     }
 
     async fn stop(&mut self) -> Result<()> {
-        self.agent_token.cancel();
+        self.cancel_tx.send(())?;
         Ok(())
     }
     
