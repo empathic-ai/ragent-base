@@ -27,7 +27,7 @@ regex = "1.7.1"
 fancy-regex = "0.11.0"
 substring = "1.4.5"
 async-channel = "1.8.0"
-uuid = { version = "1.2.2", features = ["serde", "js", "wasm-bindgen", "v4"] }
+uuid = { version = "1.2.2", features = ["v4"] }
 tokio = { version = "1.32.0", default-features = false, features = ["macros", "rt", "sync"] }
 anyhow = "1.0.75"
 bytes = "1.5.0"
@@ -39,13 +39,11 @@ lazy_static = "1.4.0"
 async-trait = "0.1.75"
 crossbeam = "0.8.2"
 cpal = "0.15.2"
-aura-api-helper = { git = "https://github.com/empathic-ai/aura-api-helper.git" }
 tokio-stream = "0.1.14"
 tonic = { version = "0.10.2", default-features = false, features = ["prost", "codegen"] }
-prost = "0.12.1"
 futures-lite = "2.3.0"
 async-compat = "0.2.3"
-hound = "3.5.1"
+prost = "0.12.1"
 
 [target.'cfg(not(target_arch = "xtensa"))'.dependencies]
 reqwest = { version = "0.11.13", features = ["json", "stream"] }
@@ -61,3 +59,6 @@ openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git", branc
 [build-dependencies]
 tonic-build = { version = "0.10.2", default-features = false, features = ["prost"] }
 prost-build = "0.12.3"
+
+[package.metadata.cargo-machete]
+ignored = ["prost"]
