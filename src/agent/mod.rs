@@ -3,7 +3,7 @@ use serde_json::Value;
 //use gloo_console as console;
 use fancy_regex::Regex;
 //use common::prelude::*;
-use ::time::SystemTime;
+use std::time::SystemTime;
 use tokio::runtime::Handle;
 use tokio::sync::RwLock;
 

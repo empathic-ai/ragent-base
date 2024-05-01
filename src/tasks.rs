@@ -8,7 +8,7 @@ use bevy::{prelude::*, reflect::{Typed, ReflectRef, TypeInfo, ReflectMut, Dynami
 use bytes::Bytes;
 use serde::*;
 use uuid::Uuid;
-use time::SystemTime;
+use std::time::SystemTime;
 use documented::Documented;
 use anyhow::Result;
 use anyhow::anyhow;
