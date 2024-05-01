@@ -11,6 +11,7 @@ crate-type = ["cdylib", "rlib"]
 [features]
 default = ["bevy"]
 server = []
+# TODO: Finish non-bevy implementation (or make bevy non-optional)
 bevy = ["dep:bevy", "ragent_core/bevy", "common/bevy"]
 
 [dependencies]

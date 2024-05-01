@@ -15,11 +15,13 @@ use futures_util::StreamExt;
 use anyhow::{Result, anyhow};
 use common::prelude::*;
 use empathic_audio::*;
+#[cfg(feature = "bevy")]
 use bevy::prelude::*;
+#[cfg(feature = "bevy")]
 use bevy::tasks::{block_on, futures_lite::future, AsyncComputeTaskPool, Task};
 use async_compat::{Compat, CompatExt};
 
-#[derive(Component)]
+#[cfg_attr(feature = "bevy", derive(Component))]
 pub struct AgentWorker {
     pub user_id: Thing,
     pub state: Arc<Mutex<AgentState>>
