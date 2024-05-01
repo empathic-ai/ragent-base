@@ -11,13 +11,13 @@ crate-type = ["cdylib", "rlib"]
 [features]
 default = ["bevy"]
 server = []
-bevy = ["dep:bevy"]
+bevy = ["dep:bevy", "ragent_core/bevy", "common/bevy"]
 
 [dependencies]
-ragent_core = { git = "https://github.com/empathic-ai/ragent-core.git" }
+ragent_core = { git = "https://github.com/empathic-ai/ragent-core.git", default-features = false }
 ragent_derive = { git = "https://github.com/empathic-ai/ragent-derive.git" }
 empathic_audio = { git = "https://github.com/empathic-ai/empathic-audio.git" }
-common = { git = "https://github.com/empathic-ai/common.git" }
+common = { git = "https://github.com/empathic-ai/common.git", default-features = false }
 bevy = { version = "=0.13.0", default-features = false, optional = true }
 # time = { git = "https://github.com/empathic-ai/time.git", features = ["std", "wasm-bindgen", "alloc", "macros", "formatting", "parsing"] }
 base64 = "0.21.5"
