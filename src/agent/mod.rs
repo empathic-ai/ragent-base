@@ -312,7 +312,7 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
 
                 let args = self.parse_arguments(&args);
 
-                if !(task_name == get_event_name::<VoiceEventArgs>() || task_name == get_event_name::<SpeakEvent>()) {
+                if !(task_name == get_event_name_from_type::<VoiceEventArgs>() || task_name == get_event_name_from_type::<SpeakEvent>()) {
                     //self.config.task_configs
                     self.call_function(task_name, args, token.clone()).await;
                     //if let Some(type_info) = Named::default().get_represented_type_info() {
@@ -348,14 +348,14 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
       
             //println!("Dangling task name found: {}", dangling_task_name);
 
-            if (dangling_task_name == get_event_name::<VoiceEventArgs>() || dangling_task_name == get_event_name::<SpeakEvent>()) {
+            if (dangling_task_name == get_event_name_from_type::<VoiceEventArgs>() || dangling_task_name == get_event_name_from_type::<SpeakEvent>()) {
                 let args = dangling_text_task.substring(dangling_task_name.chars().count() + 1, dangling_text_task.chars().count()).to_string();
                 let args = self.parse_arguments(&args);
 
                 // TODO: Write more efficiently
-                if dangling_task_name == get_event_name::<VoiceEventArgs>() && (args.len() > 2 && args[2] != "\"" && args[2] != "\'") {
+                if dangling_task_name == get_event_name_from_type::<VoiceEventArgs>() && (args.len() > 2 && args[2] != "\"" && args[2] != "\'") {
                     dangling_text_task = self.process_speech(dangling_task_name, args.clone(), token.clone()).await;
-                } else if dangling_task_name == get_event_name::<SpeakEvent>() && (args.len() > 0 && args[0] != "\"" && args[0] != "\'") {
+                } else if dangling_task_name == get_event_name_from_type::<SpeakEvent>() && (args.len() > 0 && args[0] != "\"" && args[0] != "\'") {
                     dangling_text_task = self.process_speech(dangling_task_name, args.clone(), token.clone()).await;
                 }
             }

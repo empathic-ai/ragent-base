@@ -81,7 +81,7 @@ impl TaskConfig {
         }
 
         TaskConfig {
-            name: get_event_name::<T>(),
+            name: get_event_name_from_type::<T>(),
             description: docs.to_string(),
             parameters: parameters,
             create_task: Arc::new(|args: Vec<String>| {
@@ -114,9 +114,18 @@ fn create_task<T>(name: String, args: Vec<String>) -> Result<Dynamic> where T: T
 //    }
 //}
 
-pub fn get_event_name<T>() -> String where T: Task {
+pub fn get_event_name_from_type<T>() -> String where T: Task {
     let type_name = T::type_info().type_path();
     get_event_name_from_type_name(type_name)
+}
+
+pub fn get_event_name(event_type: UserEventType) -> String {
+    if let ReflectRef::Enum(enum_ref) = event_type.as_reflect().reflect_ref() {
+        let s = enum_ref.field_at(0).unwrap();
+        return s.reflect_type_path().to_string();
+    } else {
+        panic!("Failed to find event name from instance of event type!");
+    }
 }
 
 pub fn get_event_name_from_type_name(type_name: &str) -> String {

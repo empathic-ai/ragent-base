@@ -7,6 +7,7 @@ use async_trait::async_trait;
 
 use uuid::Uuid;
 use crate::prelude::*;
+use std::time::Duration;
 use std::*;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -20,6 +21,9 @@ use bevy::prelude::*;
 #[cfg(feature = "bevy")]
 use bevy::tasks::{block_on, futures_lite::future, AsyncComputeTaskPool, Task};
 use async_compat::{Compat, CompatExt};
+use std::fs::File;
+use std::io::{BufReader, Read};
+use rodio::{Decoder, OutputStream, source::Source};
 
 #[cfg_attr(feature = "bevy", derive(Component))]
 pub struct AgentWorker {
@@ -120,10 +124,17 @@ impl AgentWorker {
     
                 match ev {
                     Ok(ev) => {
-                        if !ev.trim_start().trim_end().is_empty() {
+                        if !ev.transcript.trim_start().trim_end().is_empty() {
                             //println!("Sending transcription result to agent!");
                     
-                            let ev = UserEventType::SpeakEvent(SpeakEvent { text: ev });
+                            let speaker = if let Some(speaker) = ev.speaker {
+                                &speaker.to_string()
+                            } else {
+                                "Uknown"
+                            };
+
+                            let text = format!("[Speaker:{}] {}", speaker, ev.transcript);
+                            let ev = UserEventType::SpeakEvent(SpeakEvent { text: text });
     
                             _input_tx.send(UserEvent::new(Thing { id: "".to_string() }, _space_id, ev)).await.expect("Failed to send speak event");
                         }
@@ -222,10 +233,12 @@ impl AgentWorker {
                 }
             } 
         });
-        
+
+        let _output_tx = output_tx.clone();
+
         tokio::task::spawn(async move {
             tokio::select! {
-                _ = Self::run_synthesizer(output_rx, space_id.clone(), voice_id.clone(), asset_cache.clone(), voice_tx.clone()) => {
+                _ = Self::run_voice_processing(_output_tx, output_rx, space_id.clone(), voice_id.clone(), asset_cache.clone(), voice_tx.clone()) => {
   
                 },
                 _ = cancel_rx.recv() => {
@@ -238,7 +251,7 @@ impl AgentWorker {
         _self
     }
 
-    async fn run_synthesizer(mut output_rx: tokio::sync::broadcast::Receiver<UserEvent>, space_id: Thing, voice_id: String, asset_cache: Arc<Mutex<AssetCache>>, voice_tx: async_channel::Sender<UserEvent>) {
+    async fn run_voice_processing(output_tx: tokio::sync::broadcast::Sender<UserEvent>, mut output_rx: tokio::sync::broadcast::Receiver<UserEvent>, space_id: Thing, voice_id: String, asset_cache: Arc<Mutex<AssetCache>>, voice_tx: async_channel::Sender<UserEvent>) {
         #[cfg(not(feature="server"))]
         let synthesizer = Arc::new(PiperSynthesizer::new());
         #[cfg(feature="server")]
@@ -260,6 +273,7 @@ impl AgentWorker {
             //}
 
             if let Some(UserEventType::SpeakEvent(args)) = ev.user_event_type {
+                println!("Processing speak event: {}", args.text.clone());
                 //let voice_name = "smexy-frog".to_string();
                 let voice_name = voice_id.clone();
                 let speech_text = args.text.clone();
@@ -282,7 +296,26 @@ impl AgentWorker {
         
                 asset_cache.lock().await.load_asset(asset_id.clone(), load_func, false).await.expect("Asset load error");
         
-                voice_tx.send(UserEvent::new(user_id.unwrap(), _space_id, UserEventType::SpeakResultEvent(SpeakResultEvent{ asset_id: asset_id}))).await;
+                voice_tx.send(UserEvent::new(user_id.clone().unwrap(), _space_id.clone(), UserEventType::SpeakResultEvent(SpeakResultEvent{ asset_id: asset_id}))).await;
+            } else if let Some(UserEventType::SingEvent(args)) = ev.user_event_type {
+
+                let _output_tx = output_tx.clone();
+                tokio::spawn(async move {
+
+                    let song_name = args.song_name.replace(" ", "_").to_string();
+                    println!("SINGING SONG: {}", song_name.clone());
+
+                    let mut receiver = empathic_audio::read_wav_chunks(format!("assets/songs/{}_anatra.wav", song_name.clone()), Duration::from_millis(500), 24000, 1).await;
+    
+                    while let Some(data) = receiver.recv().await {
+    
+                        let data = empathic_audio::samples_to_wav(1, 24000, 16, data);
+    
+                        _output_tx.send(UserEvent::new(user_id.clone().unwrap(), _space_id.clone(), UserEventType::SpeakBytesEvent(SpeakBytesEvent{ data: data }))).unwrap();
+                    }
+                    println!("Done playing song.");
+                });
+
             }
         }
     }

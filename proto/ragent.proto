@@ -53,30 +53,30 @@ service AgentService {
   //rpc RouteChat(stream RouteNote) returns (stream RouteNote) {}
 }
 
-// This is a test comment.
+// This is a placeholder comment.
 message Thing {
   // Define fields that match your Rust 'Thing' struct
 //  string id = 1;
 }
 
-// This is a test comment.
+// This is a placeholder comment.
 message VoiceStreamResponse {
 }
 
-// This is a test comment.
+// This is a placeholder comment.
 message VoiceStreamRequest {
-  // This is a test comment.
+  // This is a placeholder comment.
   oneof request {
     string agent_id = 1;
     bytes data = 2;
   }
 }
 
-// This is a test comment.
+// This is a placeholder comment.
 message UserEvent {
   Thing user_id = 1;
   Thing space_id = 2;
-  // This is a test comment.
+  // This is a placeholder comment.
   oneof user_event_type {
     SpeakBytesEvent speak_bytes_event = 100;
     SpeakEvent speak_event = 102;
@@ -85,36 +85,64 @@ message UserEvent {
     UserLeftEvent user_left_event = 105;
     ResetDeviceEvent reset_device_event = 106;
     WaitEvent wait_event = 107;
+    SingEvent sing_event = 108;
+    SleepEvent sleep_event = 109;
+    WakeEvent wake_event = 110;
+    SystemEvent system_event = 111;
+    ImageBytesEvent image_bytes_event = 112;
   }
 }
 
-// This is a test comment.
+// This is a placeholder comment.
 message SpeakBytesEvent {
   bytes data = 1;
 }
 
-// This is a test comment.
+/// Speaks text using the provided voice name and emotion. The text may be a single sentence or multiple sentences.
 message SpeakEvent {
   string text = 1;
 }
 
-// This is a test comment.
+/// Sings a song with the name provided. Must be one of the available song names, which are: 'hallelujah', 'titanium', 'wish upon a star', 'duck song', 'in my heart' and 'quacky adventures'.
+message SingEvent {
+  string song_name = 1;
+}
+
+// Puts the agent to sleep. Call this function if a user requests the agent to be turned off.
+message SleepEvent {
+}
+
+// Awakes the agent from sleep. Call this function if a user requests the agent to be turned on after being turned off. The user should specifically say the agent's name for this to be called.
+message WakeEvent {
+}
+
+// This represents a general system message sent to an agent. An agent will receive system messages if there is some general information it needs to be made aware of.
+message SystemEvent {
+  string message = 1;
+}
+
+// This represents no response in a conversation. Call this function if no function should be called. Used instead of any other functions if it is most appropriate to wait for further outside input instead of responding. ONLY use this if explicitly waiting for input from a player.
+message WaitEvent {
+}
+
+// This is a placeholder comment.
+message ImageBytesEvent {
+  bytes data = 1;
+}
+
+// This is a placeholder comment.
 message SpeakResultEvent {
   string asset_id = 1;
 }
 
-// This is a test comment.
+// This is a placeholder comment.
 message UserJoinedEvent {
 }
 
-// This is a test comment.
+// This is a placeholder comment.
 message UserLeftEvent {
 }
 
 // This action resets the device the agent is running on. Only use this action if prompted to!
 message ResetDeviceEvent {
-}
-
-// Represents a non-action--used instead of any other actions if it is most appropriate to wait for further outside input before responding. ONLY use this if explicitly waiting for input from a player.
-message WaitEvent {
 }

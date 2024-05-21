@@ -5,7 +5,7 @@ use bytes::{BufMut, Bytes, BytesMut};
 use anyhow::Result;
 use futures::channel::mpsc;
 use common::prelude::*;
-use super::{result, Transcriber};
+use super::{result, Transcriber, TranscriptionResponse};
 
 pub struct WhisperTranscriber {
     
@@ -21,7 +21,7 @@ impl WhisperTranscriber {
 
 #[async_trait]
 impl Transcriber for WhisperTranscriber {
-    async fn transcribe_stream(&mut self, sample_rate: u32, stream: Receiver<Bytes>, token: CancellationToken) -> Result<mpsc::Receiver<Result<String>>> {
+    async fn transcribe_stream(&mut self, sample_rate: u32, stream: Receiver<Bytes>, token: CancellationToken) -> Result<mpsc::UnboundedReceiver<Result<TranscriptionResponse>>> {
         todo!();
     }
 }

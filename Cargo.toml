@@ -12,9 +12,10 @@ crate-type = ["cdylib", "rlib"]
 default = ["bevy"]
 server = []
 # TODO: Finish non-bevy implementation (or make bevy non-optional)
-bevy = ["dep:bevy", "ragent_core/bevy", "common/bevy"]
+bevy = ["dep:bevy", "ragent_core/bevy", "common/bevy", "bevy_builder"]
 
 [dependencies]
+bevy_builder = { git = "https://github.com/empathic-ai/bevy-builder.git", optional = true }
 ragent_core = { git = "https://github.com/empathic-ai/ragent-core.git", default-features = false }
 ragent_derive = { git = "https://github.com/empathic-ai/ragent-derive.git" }
 empathic_audio = { git = "https://github.com/empathic-ai/empathic-audio.git" }
@@ -45,6 +46,7 @@ tonic = { version = "0.10.2", default-features = false, features = ["prost", "co
 futures-lite = "2.3.0"
 async-compat = "0.2.3"
 prost = "0.12.1"
+rodio = "0.17.3"
 
 [target.'cfg(not(target_arch = "xtensa"))'.dependencies]
 reqwest = { version = "0.11.13", features = ["json", "stream"] }

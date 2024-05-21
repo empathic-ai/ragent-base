@@ -52,7 +52,7 @@ impl ChatCompleter for ChatGPT {
 
         let mut functions = Vec::<openai_api_rs::v1::chat_completion::Function>::new();
 
-        let model_name = GPT4_0613.to_string();// GPT4_0613.to_string();
+        let model_name = openai_api_rs::v1::chat_completion::GPT_40.to_string();// GPT4_0613.to_string();
 
         // TODO: Uncomment and use is_function_model() if built-in functions are preferable
         let is_function_model = false;//Self::is_function_model(model_name.clone());

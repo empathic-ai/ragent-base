@@ -31,5 +31,11 @@ pub fn channel() -> (Sender<Bytes>, Receiver<Bytes>) {
 
 #[async_trait]
 pub trait Transcriber: Send + Sync {
-    async fn transcribe_stream(&mut self, sample_rate: u32, stream: Receiver<Bytes>, token: CancellationToken) -> Result<mpsc::Receiver<Result<String>>>;
+    async fn transcribe_stream(&mut self, sample_rate: u32, stream: Receiver<Bytes>, token: CancellationToken) -> Result<mpsc::UnboundedReceiver<Result<TranscriptionResponse>>>;
+}
+
+#[derive(Clone)]
+pub struct TranscriptionResponse {
+    pub speaker: Option<u32>,
+    pub transcript: String
 }

@@ -5,7 +5,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = tonic_build::configure();
 
     let mut config = prost_build::Config::new();
-    config.extern_path(".ragent.Thing", "::ragent_core::prelude::Thing");
+    config.extern_path(".ragent.Thing", "::bevy_builder::prelude::Thing");
 
     builder = builder.type_attribute(".ragent.UserEvent", "#[derive(bevy::prelude::Event)]");
 

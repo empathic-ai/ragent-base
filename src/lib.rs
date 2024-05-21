@@ -8,7 +8,7 @@ pub mod service {
 
 use std::any::Any;
 
-use prelude::{get_event_name, get_event_name_from_type_name, SpeakEvent};
+use prelude::{get_event_name_from_type, get_event_name_from_type_name, SpeakEvent};
 pub use ragent_core;
 pub use ragent_derive;
 use bevy::prelude::FromReflect;
@@ -17,6 +17,7 @@ use bevy::reflect::{DynamicStruct, DynamicTypePath, DynamicVariant, Enum, Reflec
 use serde::{Deserialize, Serialize};
 pub use crate::service::user_event::UserEventType;
 pub use crate::service::UserEvent;
+pub use bevy_builder::prelude::Thing;
 
 use anyhow::{Result, anyhow};
 
@@ -41,13 +42,14 @@ pub mod prelude {
     pub use crate::UserEventType;
     pub use crate::UserEvent;
     pub use crate::service::*;
+    pub use bevy_builder::prelude::Thing;
 }
 
 
 
 impl UserEventType {
     pub fn from<T>(event_args: Vec<String>) -> Result<UserEventType> where T: Task + Typed {
-        let event_name = get_event_name::<T>();
+        let event_name = get_event_name_from_type::<T>();
 
         if let TypeInfo::Enum(enum_info) = UserEventType::type_info() {
             let variant_name = *enum_info.variant_names().iter().find(|x| get_event_name_from_type_name(x) == event_name).unwrap();
