@@ -46,7 +46,8 @@ pub struct AgentState {
     pub input_tx: Sender<UserEvent>,
     pub input_rx: Receiver<UserEvent>,
     pub asset_cache: Arc<Mutex<AssetCache>>,
-    pub cancel_tx: tokio::sync::broadcast::Sender<()>
+    pub cancel_tx: tokio::sync::broadcast::Sender<()>,
+    pub current_emotion: String
     //pub agent_token: CancellationToken,
 }
 
@@ -147,9 +148,9 @@ impl AgentWorker {
         });
 
         #[cfg(not(feature="server"))]
-        let chat_completer = Llama::new();        
+        let chat_completer = CandleChatCompleter::new();        
         #[cfg(feature="server")]
-        let chat_completer = ChatGPT::new_from_env();
+        let chat_completer = ChatGPTChatCompleter::new_from_env();
 
         let (cancel_tx, mut cancel_rx) = tokio::sync::broadcast::channel::<()>(1);
 
@@ -169,12 +170,15 @@ impl AgentWorker {
             input_tx: input_tx,
             input_rx: input_rx,
             asset_cache: asset_cache.clone(),
-            cancel_tx: cancel_tx
+            cancel_tx: cancel_tx,
+            current_emotion: "default".to_string()
         }));
 
         let _state = state.clone();
 
         tokio::task::spawn(async move {
+            _state.lock().await.get_some_response().await.expect("Failed to get first response!");
+
             while let Ok(ev) = _input_rx.recv().await {
                 if let Some(UserEventType::SpeakBytesEvent(args)) = ev.user_event_type {
                     //println!("Received audio: {}", args.data.len());
@@ -235,10 +239,10 @@ impl AgentWorker {
         });
 
         let _output_tx = output_tx.clone();
-
+        let _space_id = space_id.clone();
         tokio::task::spawn(async move {
             tokio::select! {
-                _ = Self::run_voice_processing(_output_tx, output_rx, space_id.clone(), voice_id.clone(), asset_cache.clone(), voice_tx.clone()) => {
+                _ = Self::run_voice_processing(_output_tx, output_rx, _space_id.clone(), voice_id.clone(), asset_cache.clone(), voice_tx.clone()) => {
   
                 },
                 _ = cancel_rx.recv() => {
@@ -248,6 +252,8 @@ impl AgentWorker {
         });
         println!("Initialized agent.");
 
+        //_self.state.lock().await.input_event(UserEvent::new(Thing::new(), space_id.clone(), UserEventType::WaitEvent(WaitEvent {})));
+
         _self
     }
 
@@ -255,7 +261,8 @@ impl AgentWorker {
         #[cfg(not(feature="server"))]
         let synthesizer = Arc::new(PiperSynthesizer::new());
         #[cfg(feature="server")]
-        let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
+        let synthesizer = Arc::new(AzureSynthesizer::new_from_env());
+        //let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
 
         while let Ok(ev) = output_rx.recv().await {
 
@@ -353,9 +360,18 @@ impl Agent for AgentState {
     }
 
     fn new_message(&mut self, role: Role, text: String) {
+        let role =  match role { Role::Agent => MessageRole::assistant, Role::Human => MessageRole::user };
+
+        if let Some(mut message) = self.messages.last_mut() {
+            if message.role == role {
+                message.content += &("\n".to_string() + text.as_str());
+                return;
+            }
+        }
+
         let message = ChatCompletionMessage {
             name: None,
-            role: match role { Role::Agent => MessageRole::assistant, Role::Human => MessageRole::user },
+            role: role,
             content: text.clone(),
             function_call: None
         };

@@ -52,20 +52,20 @@ enum BotSentiment {
 }
 
 #[derive(Debug)]
-pub struct PlayHT {
+pub struct PlayHTSynthesizer {
     api_key: String,
     user_id: String,
     synthesizer_config: SynthesizerConfig,
     // Add other fields if needed
 }
 
-impl PlayHT {
+impl PlayHTSynthesizer {
     pub fn new_from_env(synthesizer_config: SynthesizerConfig) -> Self {
         Self::new(env::var("PLAY_HT_KEY").unwrap(), env::var("PLAY_HT_USER_ID").unwrap(), synthesizer_config)
     }
 
     pub fn new(api_key: String, user_id: String, synthesizer_config: SynthesizerConfig) -> Self {
-        PlayHT {
+        PlayHTSynthesizer {
             api_key: api_key,
             user_id: user_id,
             synthesizer_config: synthesizer_config
@@ -74,7 +74,7 @@ impl PlayHT {
 }
 
 #[async_trait]
-impl Synthesizer for PlayHT {
+impl Synthesizer for PlayHTSynthesizer {
     async fn create_speech(&self, emotion: String, voice_name: String, text: String) -> Result<SynthesisResult> {
         let client = reqwest::Client::new();
         let mut headers = HeaderMap::new();

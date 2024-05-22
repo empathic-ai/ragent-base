@@ -90,6 +90,7 @@ message UserEvent {
     WakeEvent wake_event = 110;
     SystemEvent system_event = 111;
     ImageBytesEvent image_bytes_event = 112;
+    EmoteEvent emote_event = 113;
   }
 }
 
@@ -100,6 +101,11 @@ message SpeakBytesEvent {
 
 /// Speaks text using the provided voice name and emotion. The text may be a single sentence or multiple sentences.
 message SpeakEvent {
+  string text = 1;
+}
+
+/// Sets the current emotion of the agent. Call this function prior to speaking if the tone of the agent's voice should be different than the last emotion of the agent.
+message EmoteEvent {
   string text = 1;
 }
 

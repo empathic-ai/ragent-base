@@ -25,8 +25,9 @@ lazy_static! {
         map.insert("raspy-man".to_string(), "t0jbNlBVZ17f02VDIeMI".to_string());
         //map.insert("smexy-frog".to_string(), "TJ5lH6wsCvZ2alDg7xrH".to_string());
         // Old smexy frog voice, more gritty
-        map.insert("smexy-frog".to_string(), "N2lVS1w4EtoT3dr4eOWO".to_string());
-        map.insert("anatra".to_string(),"gkvpzrzujkR7osK9HAgg".to_string());
+        map.insert("man-a".to_string(), "N2lVS1w4EtoT3dr4eOWO".to_string());
+        // Anatra voice
+        map.insert("child".to_string(),"gkvpzrzujkR7osK9HAgg".to_string());
         // Old anatra voice
         //map.insert("anatra".to_string(), "F9UvutjrG9l2yvDB2zSt".to_string());
         map

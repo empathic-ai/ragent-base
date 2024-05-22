@@ -1,21 +1,21 @@
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(target_arch = "xtensa"))]
-pub mod claude;
+pub mod claude_chat_completer;
 use std::pin::Pin;
 
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(target_arch = "xtensa"))]
-pub use claude::*;
+pub use claude_chat_completer::*;
 
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(target_arch = "xtensa"))]
-pub mod chat_gpt;
+pub mod chat_gpt_chat_completer;
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(target_arch = "xtensa"))]
-pub use chat_gpt::*;
+pub use chat_gpt_chat_completer::*;
 
-pub mod llama;
-pub use llama::*;
+pub mod candle_chat_completer;
+pub use candle_chat_completer::*;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -24,7 +24,7 @@ use crate::prelude::*;
 use futures_util::{Stream, FutureExt, StreamExt, stream, TryStreamExt};
 use anyhow::Result;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[allow(non_camel_case_types)]
 pub enum MessageRole {
     user,

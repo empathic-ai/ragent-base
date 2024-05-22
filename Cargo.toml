@@ -47,6 +47,10 @@ futures-lite = "2.3.0"
 async-compat = "0.2.3"
 prost = "0.12.1"
 rodio = "0.17.3"
+candle-core = { git = "https://github.com/huggingface/candle.git", version = "0.5.1" }
+candle-nn = { git = "https://github.com/huggingface/candle.git", version = "0.5.1" }
+candle-transformers = { git = "https://github.com/huggingface/candle.git", version = "0.5.1" }
+tokenizers = "0.19.1"
 
 [target.'cfg(not(target_arch = "xtensa"))'.dependencies]
 reqwest = { version = "0.11.13", features = ["json", "stream"] }

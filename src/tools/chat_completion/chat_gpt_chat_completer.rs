@@ -18,18 +18,18 @@ use anyhow::{Result, anyhow};
 use common::prelude::*;
 use empathic_audio::*;
 
-pub struct ChatGPT {
+pub struct ChatGPTChatCompleter {
     pub api_key: String
 }
 
-impl ChatGPT {
+impl ChatGPTChatCompleter {
     pub fn new_from_env() -> Self {
         Self { api_key: env::var("OPENAI_API_KEY").unwrap() }
     }
 }
 
 #[async_trait]
-impl ChatCompleter for ChatGPT {
+impl ChatCompleter for ChatGPTChatCompleter {
     async fn get_response(&self, messages: Vec<super::ChatCompletionMessage>, task_configs: Vec<TaskConfig>) -> Result<Pin<Box<dyn Stream<Item = Result<super::ChatCompletionResponse>> + Send>>> {
         //GPT3_5_TURBO
         //GPT4_0613

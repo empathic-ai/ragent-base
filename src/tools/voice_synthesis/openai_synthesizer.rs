@@ -21,18 +21,18 @@ lazy_static! {
 }
 
 #[derive(Debug, Clone)]
-pub struct OpenAITTS {
+pub struct OpenAISynthesizer {
     pub api_key: String
 }
 
-impl OpenAITTS {
-    pub fn new_from_env() -> OpenAITTS {
-        OpenAITTS { api_key: env::var("OPENAI_API_KEY").unwrap() }
+impl OpenAISynthesizer {
+    pub fn new_from_env() -> OpenAISynthesizer {
+        OpenAISynthesizer { api_key: env::var("OPENAI_API_KEY").unwrap() }
     }
 }
 
 #[async_trait]
-impl Synthesizer for OpenAITTS {
+impl Synthesizer for OpenAISynthesizer {
     async fn create_speech(&self, emotion: String, voice_name: String, text: String) -> Result<SynthesisResult> {
         let voice_name = VOICE_NAME_BY_NAME.get(&voice_name).unwrap();
         let client = Client::new(env::var("OPENAI_API_KEY").unwrap().to_string());

@@ -11,18 +11,18 @@ use anthropic::{AI_PROMPT, HUMAN_PROMPT};
 
 use tokio_stream::StreamExt;
 
-pub struct Claude {
+pub struct ClaudeChatCompleter {
     pub api_key: String
 }
 
-impl Claude {
+impl ClaudeChatCompleter {
     pub fn new_from_env() -> Self {
         Self { api_key: env::var("CLAUDE_API_KEY").unwrap() }
     }
 }
 
 #[async_trait]
-impl ChatCompleter for Claude {
+impl ChatCompleter for ClaudeChatCompleter {
     async fn get_response(&self, messages: Vec<super::ChatCompletionMessage>, task_configs: Vec<TaskConfig>) -> Result<Pin<Box<dyn Stream<Item = Result<super::ChatCompletionResponse>> + Send>>> {
         // = futures_channel::channel();
         //eventsource_stream::

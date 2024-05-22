@@ -464,12 +464,6 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
             return Ok(());
         }
 
-        if let Some(token) = self.get_current_token() {
-            token.cancel();
-        }
-        let token = CancellationToken::new();
-        self.set_current_token(Some(token.clone()));
-
         //for arg in ev.args.0.as_ref()
 
         //let speech_task = ev.args.into_reflect().downcast::<SpeakEventArgs>().unwrap();
@@ -511,8 +505,19 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
 
         //let prompt_text = prompt_text;
         self.new_message(role, ev_description);
-        self.get_response(token).await?;
+        self.get_some_response().await?;
  
+        Ok(())
+    }
+
+    async fn get_some_response(&mut self) -> Result<()> {
+        if let Some(token) = self.get_current_token() {
+            token.cancel();
+        }
+        let token = CancellationToken::new();
+        self.set_current_token(Some(token.clone()));
+
+        self.get_response(token).await?;
         Ok(())
     }
         

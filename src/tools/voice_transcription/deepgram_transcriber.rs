@@ -143,7 +143,7 @@ impl Transcriber for DeepgramTranscriber {
                                                 } else {
                                                     if let Some(mut last) = transcript_responses.last_mut() {
                                                         if word.speaker == last.speaker {
-                                                            last.transcript += word.word.as_str();
+                                                            last.transcript += &(" ".to_string() + word.word.as_str());
                                                             continue;
                                                         }
                                                     }
