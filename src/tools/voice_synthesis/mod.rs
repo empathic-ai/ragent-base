@@ -16,7 +16,7 @@ pub mod eleven_labs_synthesizer;
 #[cfg(not(target_arch = "xtensa"))]
 pub mod azure_synthesizer;
 
-pub mod piper_synthesizer;
+pub mod candle_synthesizer;
 pub mod coqui_synthesizer;
 
 use async_trait::async_trait;

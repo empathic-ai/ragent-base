@@ -7,3 +7,5 @@ pub use chat_completion::*;
 pub use image_generation::prelude::*;
 pub use voice_synthesis::prelude::*;
 pub use voice_transcription::*;
+
+pub mod candle_helpers;

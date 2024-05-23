@@ -1,5 +1,5 @@
 use async_channel::{Sender, Receiver};
-use base_agent::{coqui_synthesizer::CoquiSynthesizer, piper_synthesizer::PiperSynthesizer};
+use base_agent::{coqui_synthesizer::CoquiSynthesizer, candle_synthesizer::CandleSynthesizer};
 use bytes::Bytes;
 use futures_util::lock::Mutex;
 
@@ -259,7 +259,7 @@ impl AgentWorker {
 
     async fn run_voice_processing(output_tx: tokio::sync::broadcast::Sender<UserEvent>, mut output_rx: tokio::sync::broadcast::Receiver<UserEvent>, space_id: Thing, voice_id: String, asset_cache: Arc<Mutex<AssetCache>>, voice_tx: async_channel::Sender<UserEvent>) {
         #[cfg(not(feature="server"))]
-        let synthesizer = Arc::new(PiperSynthesizer::new());
+        let synthesizer = Arc::new(CandleSynthesizer::new());
         #[cfg(feature="server")]
         let synthesizer = Arc::new(AzureSynthesizer::new_from_env());
         //let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
