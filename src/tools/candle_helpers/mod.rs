@@ -120,7 +120,7 @@ pub fn save_image_resize<P: AsRef<std::path::Path>>(
     image.save(p).map_err(candle_core::Error::wrap)?;
     Ok(())
 }
-
+/*
 /// Loads the safetensors files for a model from the hub based on a json index file.
 pub fn hub_load_safetensors(
     repo: &hf_hub::api::sync::ApiRepo,
@@ -147,3 +147,4 @@ pub fn hub_load_safetensors(
         .collect::<Result<Vec<_>>>()?;
     Ok(safetensors_files)
 }
+ */

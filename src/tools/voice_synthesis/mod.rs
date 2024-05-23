@@ -16,7 +16,9 @@ pub mod eleven_labs_synthesizer;
 #[cfg(not(target_arch = "xtensa"))]
 pub mod azure_synthesizer;
 
+// Will need to likely add WASM support to 'hf_hub' crate for this
 pub mod candle_synthesizer;
+
 pub mod coqui_synthesizer;
 
 use async_trait::async_trait;
