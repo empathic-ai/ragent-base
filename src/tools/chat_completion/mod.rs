@@ -1,17 +1,21 @@
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(target_arch = "xtensa"))]
+#[cfg(not(target_os = "android"))]
 pub mod claude_chat_completer;
 use std::pin::Pin;
 
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(target_arch = "xtensa"))]
+#[cfg(not(target_os = "android"))]
 pub use claude_chat_completer::*;
 
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(target_arch = "xtensa"))]
+#[cfg(not(target_os = "android"))]
 pub mod chat_gpt_chat_completer;
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(target_arch = "xtensa"))]
+#[cfg(not(target_os = "android"))]
 pub use chat_gpt_chat_completer::*;
 
 pub mod candle_chat_completer;

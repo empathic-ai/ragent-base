@@ -1,12 +1,23 @@
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(target_arch = "xtensa"))]
+#[cfg(not(target_os = "android"))]
 pub mod deepgram_transcriber;
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(target_arch = "xtensa"))]
+#[cfg(not(target_os = "android"))]
 pub use deepgram_transcriber::*;
 
+#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_arch = "xtensa"))]
 pub mod whisper_transcriber;
+#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_arch = "xtensa"))]
 pub use whisper_transcriber::*;
+
+#[cfg(target_arch = "wasm32")]
+pub mod web_speech_transcriber;
+#[cfg(target_arch = "wasm32")]
+pub use web_speech_transcriber::*;
 
 use std::error::Error;
 use bytes::Bytes;

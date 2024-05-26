@@ -5,9 +5,11 @@ use std::collections::HashMap;
 
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(target_arch = "xtensa"))]
+#[cfg(not(target_os = "android"))]
 pub mod dalle2_image_generator;
 
 #[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_os = "android"))]
 pub mod candle_image_generator;
 
 pub struct ImageResult {
@@ -21,8 +23,10 @@ pub trait ImageGenerator {
 pub mod prelude {
     #[cfg(not(target_arch = "wasm32"))]
     #[cfg(not(target_arch = "xtensa"))]
+    #[cfg(not(target_os = "android"))]
     pub use super::dalle2_image_generator::*;
     #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_os = "android"))]
     pub use super::candle_image_generator::*;
     pub use super::*;
 }

@@ -1,5 +1,6 @@
 use async_channel::{Sender, Receiver};
-use base_agent::{coqui_synthesizer::CoquiSynthesizer, candle_synthesizer::CandleSynthesizer};
+use base_agent::{coqui_synthesizer::CoquiSynthesizer};
+
 use bytes::Bytes;
 use futures_util::lock::Mutex;
 
@@ -23,7 +24,7 @@ use bevy::tasks::{block_on, futures_lite::future, AsyncComputeTaskPool, Task};
 use async_compat::{Compat, CompatExt};
 use std::fs::File;
 use std::io::{BufReader, Read};
-use rodio::{Decoder, OutputStream, source::Source};
+//use rodio::{Decoder, OutputStream, source::Source};
 
 #[cfg_attr(feature = "bevy", derive(Component))]
 pub struct AgentWorker {
@@ -98,7 +99,11 @@ impl AgentWorker {
         let _agent_token = agent_token.clone();
         
         #[cfg(not(feature="server"))]
-        let mut transcriber = WhisperTranscriber::new();
+        #[cfg(not(target_arch="wasm32"))]
+        let mut transcriber = whisper_transcriber::WhisperTranscriber::new();
+        #[cfg(not(feature="server"))]
+        #[cfg(target_arch="wasm32")]
+        let mut transcriber = web_speech_transcriber::WebSpeechTranscriber::new();
         #[cfg(feature="server")]
         let mut transcriber = DeepgramTranscriber::new_from_env();
 
@@ -259,7 +264,7 @@ impl AgentWorker {
 
     async fn run_voice_processing(output_tx: tokio::sync::broadcast::Sender<UserEvent>, mut output_rx: tokio::sync::broadcast::Receiver<UserEvent>, space_id: Thing, voice_id: String, asset_cache: Arc<Mutex<AssetCache>>, voice_tx: async_channel::Sender<UserEvent>) {
         #[cfg(not(feature="server"))]
-        let synthesizer = Arc::new(CandleSynthesizer::new());
+        let synthesizer = Arc::new(CoquiSynthesizer::new());
         #[cfg(feature="server")]
         let synthesizer = Arc::new(AzureSynthesizer::new_from_env());
         //let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
