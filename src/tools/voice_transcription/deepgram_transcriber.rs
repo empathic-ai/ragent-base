@@ -9,8 +9,8 @@ use std::sync::Arc;
 use std::thread;
 
 use bytes::{BufMut, Bytes, BytesMut};
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::Sample;
+//use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+//use cpal::Sample;
 use crossbeam::channel::RecvError;
 use futures::channel::mpsc;
 use futures::stream::StreamExt;
