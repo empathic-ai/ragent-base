@@ -77,10 +77,8 @@ impl Transcriber for DeepgramTranscriber {
                     // Start a task to forward items from the original stream to the new stream
                     tokio::spawn(async move {
                         let mut locked_stream = stream_clone.lock().await;
-                        println!("WAITING FOR LOCKED STREAM TO UNLOCK!");
-    
+
                         while let Ok(item) = locked_stream.recv().await {
-                            println!("LOCKED STREAM UNLOCKED!");
                             let _token = _token.clone();
                             if _token.is_cancelled() {
                                 continue;
