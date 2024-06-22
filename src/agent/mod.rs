@@ -188,7 +188,7 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
 
     async fn process(&mut self) -> Result<()>;
 
-    fn new_message(&mut self, role: Role, text: String);
+    fn new_message(&mut self, role: Role, content: Content);
 
     async fn get_response(&mut self, token: CancellationToken) -> Result<()> {
         Ok(())
@@ -338,7 +338,8 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
 
         // If there is a space later on in the string, process it as a speech command
         if dangling_task_name.is_none() && dangling_text_task.trim_start_matches("\n").trim_start().contains(' ') {
-            dangling_text_task = r#"speak("default", "default", "#.to_string() + &dangling_text_task;
+            //dangling_text_task = r#"speak("default", "default", "#.to_string() + &dangling_text_task;
+            dangling_text_task = r#"speak("#.to_string() + &dangling_text_task;
             t = dangling_text_task.clone();
             dangling_task_name = r.captures(&t).unwrap();
         }
@@ -396,7 +397,7 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
     async fn try_recv_event(&mut self) -> Result<UserEvent>;
 
     async fn process_speech(&mut self, ev_name: String, mut args: Vec<String>, token: CancellationToken) -> String {
-        format!(r#"Processing speech: {}"#, args.join(", "));
+        println!("Processing speech: {}", args.join(", "));
 
         let length = args.len();
         //let re: Regex = Regex::new(r#".*?(?:\n|\r|\.|\?|!|,)"#).unwrap();
@@ -464,6 +465,16 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
             return Ok(());
         }
 
+        let content = match ev.user_event_type.unwrap() {
+            UserEventType::ImageBytesEvent(ev) => {
+                let data = base64::encode(ev.data.clone());
+                let v = vec![ImageUrl { r#type: ContentType::image_url, text: None, image_url: Some(ImageUrlType { url: format!("data:image/jpeg;base64,{}",data) }) }];
+                Content::ImageUrl(v)
+            },
+            _ => {
+                Content::Text(ev_description)    
+            }
+        };
         //for arg in ev.args.0.as_ref()
 
         //let speech_task = ev.args.into_reflect().downcast::<SpeakEventArgs>().unwrap();
@@ -504,7 +515,7 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
         // Gets response from ChatGPT
 
         //let prompt_text = prompt_text;
-        self.new_message(role, ev_description);
+        self.new_message(role, content);
         self.get_some_response().await?;
  
         Ok(())
@@ -557,7 +568,7 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
             let event_type = (task_config.create_task)(arguments)?;
 
             let ev = UserEvent::new(self.get_user_id().clone(), self.get_space_id().clone(), event_type);
-            self.new_message(Role::Agent, ev.get_event_description()?);
+            self.new_message(Role::Agent, Content::Text(ev.get_event_description()?));
             self.output_event(ev.clone()).await?;
             Ok(())
         } else {

@@ -6,11 +6,12 @@ use crate::prelude::*;
 
 use anthropic::client::Client;
 use anthropic::config::AnthropicConfig;
-use anthropic::types::{MessagesRequest, MessagesRequestBuilder, StopReason};
+use anthropic::types::*;
 use anthropic::{AI_PROMPT, HUMAN_PROMPT};
 
 use tokio_stream::StreamExt;
 
+#[derive(Clone)]
 pub struct ClaudeChatCompleter {
     pub api_key: String
 }
@@ -23,7 +24,7 @@ impl ClaudeChatCompleter {
 
 #[async_trait]
 impl ChatCompleter for ClaudeChatCompleter {
-    async fn get_response(&self, messages: Vec<super::ChatCompletionMessage>, task_configs: Vec<TaskConfig>) -> Result<Pin<Box<dyn Stream<Item = Result<super::ChatCompletionResponse>> + Send>>> {
+    async fn get_response(&mut self, messages: Vec<super::ChatCompletionMessage>, task_configs: Vec<TaskConfig>) -> Result<Pin<Box<dyn Stream<Item = Result<super::ChatCompletionResponse>> + Send>>> {
         // = futures_channel::channel();
         //eventsource_stream::
 
@@ -47,8 +48,32 @@ impl ChatCompleter for ClaudeChatCompleter {
         let stream = stream.map(|x| {
             match x {
                 Ok(x) => {
+                    let completion_response = match x {
+                        MessagesStreamEvent::MessageStart { message } => {
+                            "".to_string()
+                        },
+                        MessagesStreamEvent::ContentBlockStart { index, content_block } => {
+                            "".to_string()
+                        },
+                        MessagesStreamEvent::ContentBlockDelta { index, delta } => {
+                            match delta {
+                                ContentBlockDelta::TextDelta { text } => {
+                                    text
+                                },
+                            }
+                        },
+                        MessagesStreamEvent::ContentBlockStop { index } => {
+                            "".to_string()
+                        },
+                        MessagesStreamEvent::MessageDelta { delta, usage } => {
+                            "".to_string()
+                        },
+                        MessagesStreamEvent::MessageStop => {
+                            "".to_string()
+                        },
+                    };
                     Ok(super::ChatCompletionResponse {
-                        completion: todo!()
+                        completion: completion_response
                     })
                 },
                 Err(e) => {

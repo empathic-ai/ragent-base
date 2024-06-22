@@ -29,7 +29,7 @@ use std::io::{BufReader, Read};
 #[cfg_attr(feature = "bevy", derive(Component))]
 pub struct AgentWorker {
     pub user_id: Thing,
-    pub state: Arc<Mutex<AgentState>>
+    pub state: Arc<Mutex<AgentState>>,
 }
 
 pub struct AgentState {
@@ -37,18 +37,18 @@ pub struct AgentState {
     pub space_id: Thing,
     pub transcriber: Option<Box<dyn Transcriber>>,
     pub synthesizer: Option<Box<dyn Synthesizer>>,
-    pub chat_completer: Box<dyn ChatCompleter>,
     pub messages: Vec<ChatCompletionMessage>,
     pub functions: Vec<Function>,
     pub output_tx: tokio::sync::broadcast::Sender<UserEvent>,
     pub output_rx: tokio::sync::broadcast::Receiver<UserEvent>,
     pub config: AgentConfig,
-    pub current_token: Option<CancellationToken>,
     pub input_tx: Sender<UserEvent>,
     pub input_rx: Receiver<UserEvent>,
     pub asset_cache: Arc<Mutex<AssetCache>>,
     pub cancel_tx: tokio::sync::broadcast::Sender<()>,
-    pub current_emotion: String
+    pub chat_completer: Box<dyn ChatCompleter>,
+    pub current_emotion: String,
+    pub current_token: Option<CancellationToken>,
     //pub agent_token: CancellationToken,
 }
 
@@ -71,7 +71,7 @@ impl AgentWorker {
         let message = ChatCompletionMessage {
             name: None,
             role: MessageRole::system,
-            content: system_prompt.clone(),
+            content: Content::Text(system_prompt.clone()),
             function_call: None
         };
         messages.push(message);
@@ -113,8 +113,8 @@ impl AgentWorker {
         // TODO: Rework with new Bevy implementation
         /*
         let task = tokio::task::spawn(async move {
-);
- */
+        );
+        */
 
         let _space_id = space_id.clone();
         tokio::task::spawn(async move {
@@ -155,6 +155,7 @@ impl AgentWorker {
         #[cfg(not(feature="server"))]
         let chat_completer = CandleChatCompleter::new();        
         #[cfg(feature="server")]
+        //let chat_completer = CandleChatCompleter::new();        
         let chat_completer = ChatGPTChatCompleter::new_from_env();
 
         let (cancel_tx, mut cancel_rx) = tokio::sync::broadcast::channel::<()>(1);
@@ -171,12 +172,12 @@ impl AgentWorker {
             output_tx: output_tx.clone(),
             output_rx: output_tx.subscribe(),
             config: config,
-            current_token: None,
             input_tx: input_tx,
             input_rx: input_rx,
             asset_cache: asset_cache.clone(),
             cancel_tx: cancel_tx,
-            current_emotion: "default".to_string()
+            current_emotion: "default".to_string(),
+            current_token: None
         }));
 
         let _state = state.clone();
@@ -189,14 +190,14 @@ impl AgentWorker {
                     //println!("Received audio: {}", args.data.len());
                     transcriber_input_tx.send(Bytes::from_iter(args.data)).unwrap();
                 } else {
-                    _state.lock().await.process_user_event(ev).await;
+                    _state.lock().await.process_user_event(ev).await.expect("Failed to get response to user event!");
                 }
             }
         });
 
         let _self = Self {
             user_id: user_id.clone(),
-            state: state
+            state: state,
         };
 
         let _output_tx = output_tx.clone();
@@ -266,8 +267,8 @@ impl AgentWorker {
         #[cfg(not(feature="server"))]
         let synthesizer = Arc::new(CoquiSynthesizer::new());
         #[cfg(feature="server")]
-        let synthesizer = Arc::new(AzureSynthesizer::new_from_env());
-        //let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
+        //let synthesizer = Arc::new(AzureSynthesizer::new_from_env());
+        let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
 
         while let Ok(ev) = output_rx.recv().await {
 
@@ -364,22 +365,33 @@ impl Agent for AgentState {
         Ok(())
     }
 
-    fn new_message(&mut self, role: Role, text: String) {
+    fn new_message(&mut self, role: Role, content: Content) {
         let role =  match role { Role::Agent => MessageRole::assistant, Role::Human => MessageRole::user };
 
-        if let Some(mut message) = self.messages.last_mut() {
-            if message.role == role {
-                message.content += &("\n".to_string() + text.as_str());
-                return;
+        if let Content::Text(text) = content.clone() {
+            if let Some(i) = self.messages.iter().rposition(|x| matches!(x.content, Content::Text { .. })) {
+                let mut message = &mut self.messages[i];
+    
+                if message.role == role {
+                    let text_content = (if let Content::Text(text) = message.content.clone() {
+                        Some(text)
+                    } else {
+                        None
+                    }).unwrap();
+    
+                    message.content = Content::Text(text_content + &("\n".to_string() + text.as_str()));
+                    return;
+                }
             }
         }
-
+  
         let message = ChatCompletionMessage {
             name: None,
             role: role,
-            content: text.clone(),
+            content: content,
             function_call: None
         };
+        
         self.messages.push(message);
     }
 

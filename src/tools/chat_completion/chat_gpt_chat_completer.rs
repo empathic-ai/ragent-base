@@ -3,7 +3,6 @@ use bytes::Bytes;
 use futures_util::lock::Mutex;
 use openai_api_rs::v1::api::Client;
 use openai_api_rs::v1::chat_completion::*;
-use openai_api_rs::v1::fine_tune::ModelDetails;
 
 use async_trait::async_trait;
 
@@ -18,6 +17,7 @@ use anyhow::{Result, anyhow};
 use common::prelude::*;
 use empathic_audio::*;
 
+#[derive(Clone)]
 pub struct ChatGPTChatCompleter {
     pub api_key: String
 }
@@ -30,7 +30,7 @@ impl ChatGPTChatCompleter {
 
 #[async_trait]
 impl ChatCompleter for ChatGPTChatCompleter {
-    async fn get_response(&self, messages: Vec<super::ChatCompletionMessage>, task_configs: Vec<TaskConfig>) -> Result<Pin<Box<dyn Stream<Item = Result<super::ChatCompletionResponse>> + Send>>> {
+    async fn get_response(&mut self, messages: Vec<super::ChatCompletionMessage>, task_configs: Vec<TaskConfig>) -> Result<Pin<Box<dyn Stream<Item = Result<super::ChatCompletionResponse>> + Send>>> {
         //GPT3_5_TURBO
         //GPT4_0613
 
@@ -44,15 +44,25 @@ impl ChatCompleter for ChatGPTChatCompleter {
                     chat_completion::MessageRole::assistant =>  openai_api_rs::v1::chat_completion::MessageRole::assistant,
                     chat_completion::MessageRole::function =>  openai_api_rs::v1::chat_completion::MessageRole::function,
                 },
-                content: message.content,
+                content: match message.content {
+                    super::Content::Text(text) => openai_api_rs::v1::chat_completion::Content::Text(text),
+                    super::Content::ImageUrl(image_url) => openai_api_rs::v1::chat_completion::Content::ImageUrl(
+                        vec![
+                            openai_api_rs::v1::chat_completion::ImageUrl {
+                                r#type: openai_api_rs::v1::chat_completion::ContentType::image_url,
+                                text: Some(image_url[0].text.clone().unwrap()),
+                                image_url: Some(openai_api_rs::v1::chat_completion::ImageUrlType { url: image_url[0].image_url.clone().unwrap().url })
+                            }
+                        ]
+                    ),
+                },
                 name: message.name,
-                function_call: None
             }
         }).collect();
 
         let mut functions = Vec::<openai_api_rs::v1::chat_completion::Function>::new();
 
-        let model_name = openai_api_rs::v1::chat_completion::GPT_40.to_string();// GPT4_0613.to_string();
+        let model_name = openai_api_rs::v1::common::GPT4_O.to_string();// GPT4_0613.to_string();
 
         // TODO: Uncomment and use is_function_model() if built-in functions are preferable
         let is_function_model = false;//Self::is_function_model(model_name.clone());
@@ -61,9 +71,8 @@ impl ChatCompleter for ChatGPTChatCompleter {
             let function_prompt = super::get_function_prompt(task_configs.clone());
             messages.insert(0,  openai_api_rs::v1::chat_completion::ChatCompletionMessage {
                 role:  openai_api_rs::v1::chat_completion::MessageRole::system,
-                content: function_prompt,
+                content: openai_api_rs::v1::chat_completion::Content::Text(function_prompt),
                 name: None,
-                function_call: None
             });
         };
 
@@ -104,11 +113,14 @@ impl ChatCompleter for ChatGPTChatCompleter {
         let stream = stream.map(|x| {
             match x {
                 Ok(x) => {
+                    let completion_response = x.choices[0].delta.as_ref().unwrap().content.clone().unwrap_or("".to_string());
+                    println!("GOT RESPONSE: {}", completion_response);
                     Ok(super::ChatCompletionResponse {
-                        completion: x.choices[0].delta.content.clone().unwrap_or("".to_string())
+                        completion: completion_response
                     })
                 },
                 Err(e) => {
+                    println!("ERROR GETTING CHAT RESPONSE: {}", e);
                     Err(e)
                 },
             }

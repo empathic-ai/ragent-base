@@ -109,7 +109,7 @@ message EmoteEvent {
   string text = 1;
 }
 
-/// Sings a song with the name provided. Must be one of the available song names, which are: 'hallelujah', 'titanium', 'wish upon a star', 'duck song', 'in my heart' and 'quacky adventures'.
+/// Sings a song with the name provided. Must be one of the songs specified as available, if any.
 message SingEvent {
   string song_name = 1;
 }

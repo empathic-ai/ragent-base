@@ -48,11 +48,40 @@ pub struct FunctionCall {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ChatCompletionMessage {
     pub role: MessageRole,
-    pub content: String,
+    pub content: Content,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub function_call: Option<FunctionCall>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub enum Content {
+    Text(String),
+    ImageUrl(Vec<ImageUrl>),
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[allow(non_camel_case_types)]
+pub struct ImageUrl {
+    pub r#type: ContentType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_url: Option<ImageUrlType>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[allow(non_camel_case_types)]
+pub enum ContentType {
+    text,
+    image_url,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[allow(non_camel_case_types)]
+pub struct ImageUrlType {
+    pub url: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -93,5 +122,5 @@ pub struct FunctionParameters {
 
 #[async_trait]
 pub trait ChatCompleter: Send + Sync {
-    async fn get_response(&self, messages: Vec<ChatCompletionMessage>, task_configs: Vec<TaskConfig>) -> Result<Pin<Box<dyn Stream<Item = Result<ChatCompletionResponse>> + Send>>>;
+    async fn get_response(&mut self, messages: Vec<ChatCompletionMessage>, task_configs: Vec<TaskConfig>) -> Result<Pin<Box<dyn Stream<Item = Result<ChatCompletionResponse>> + Send>>>;
 }

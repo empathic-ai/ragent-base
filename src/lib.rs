@@ -8,6 +8,7 @@ pub mod service {
 
 use std::any::Any;
 
+use bevy::ecs::event;
 use prelude::{get_event_name_from_type, get_event_name_from_type_name, SpeakEvent};
 pub use ragent_core;
 pub use ragent_derive;
@@ -51,9 +52,14 @@ impl UserEventType {
     pub fn from<T>(event_args: Vec<String>) -> Result<UserEventType> where T: Task + Typed {
         let event_name = get_event_name_from_type::<T>();
 
+        for event_arg in event_args.iter() {
+            println!("Event arg: {}", event_arg);
+        }
+        
+    
         if let TypeInfo::Enum(enum_info) = UserEventType::type_info() {
             let variant_name = *enum_info.variant_names().iter().find(|x| get_event_name_from_type_name(x) == event_name).unwrap();
-            //println!("Variant name: {}", variant_name);
+            println!("Variant name: {}", variant_name);
             
             if let Some(VariantInfo::Tuple(variant_info)) = enum_info.variant(variant_name.clone()) {
                 //println!("{}", variant_info.name());
@@ -62,7 +68,7 @@ impl UserEventType {
 
                     let mut data = DynamicStruct::default();
                     for i in 0..event_args.len() {
-                        let field = struct_info.field_at(i).expect("Failed to find field at index");
+                        let field = struct_info.field_at(i).expect(&format!("Failed to find field at index {} in type {}", i, event_name));
                         data.insert(field.name(), event_args[i].clone());
                     }
     

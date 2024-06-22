@@ -28,13 +28,13 @@ use tokio::sync::broadcast::{self, Sender, Receiver};
 
 use common::prelude::*;
 pub struct DeepgramTranscriber {
-    
+    languages: Vec<String>
 }
 
 impl DeepgramTranscriber {
     pub fn new_from_env() -> Self {
         DeepgramTranscriber {
-
+            languages: vec!["en".to_string()]
         }
     }
 }
@@ -45,143 +45,160 @@ impl Transcriber for DeepgramTranscriber {
     // Possibly use VAD for detecting when to re-initialize a connection?
     // 48000
     async fn transcribe_stream(&mut self, sample_rate: u32, stream: Receiver<Bytes>, token: CancellationToken) -> Result<mpsc::UnboundedReceiver<Result<TranscriptionResponse>>> {
-        let (mut async_tx, async_rx) = mpsc::unbounded::<Result<TranscriptionResponse>>();
 
-        let stream = Arc::new(Mutex::new(stream));
+        // If only one language is supported, use Deepgram's streaming mode (which don't support language detection)
+        // Otherwise, use Deepgram's non-streaming mode
+        if self.languages.len() == 1 {
+            let (mut async_tx, async_rx) = mpsc::unbounded::<Result<TranscriptionResponse>>();
 
-        //println!("Getting Deepgram stream...");
-        let _token = token.clone();
-        
-        tokio::task::spawn(async move {
-            loop {
-                let _token = _token.clone();
-                if _token.is_cancelled() {
-                    continue;
-                }
+            let stream = Arc::new(Mutex::new(stream));
 
-                let stream_clone = stream.clone();
-
-                let item = stream.lock().await.recv().await.clone();
-                
-                if let Ok(item) = item {
-
-                    println!("GOT VOICE DATA ITEM!");
-                    let (mut forward_tx, mut forward_rx) = mpsc::channel::<Result<Bytes>>(16);
-
-                    let is_terminated = Arc::new(Mutex::new(false));
-    
-                    let _is_terminated = is_terminated.clone();
-
-                    let mut _forward_tx = forward_tx.clone();
-
-                    // Start a task to forward items from the original stream to the new stream
-                    tokio::spawn(async move {
-                        let mut locked_stream = stream_clone.lock().await;
-
-                        while let Ok(item) = locked_stream.recv().await {
-                            let _token = _token.clone();
-                            if _token.is_cancelled() {
-                                continue;
-                            }
-    
-                            if _is_terminated.lock().await.to_owned() {
-                                break;
-                            }
-                            if forward_tx.send(Ok(item)).await.is_err() {
-                                //panic!("STREAM ERROR");
-                                break;
-                            }
-                        }
-                    });
-    
-                    let dg = Deepgram::new(env::var("DEEPGRAM_API_KEY").unwrap());
-    
-                    //println!("Getting Deepgram results...");
-                    
-                    let mut results = dg
-                        .transcription()
-                        .stream_request()
-                        .stream(forward_rx)
-                        // TODO Enum.
-                        .encoding("linear16".to_string())
-                        // TODO Specific to my machine, not general enough example.
-                        .sample_rate(sample_rate)//44100)
-                        // TODO Specific to my machine, not general enough example.
-                        .channels(2)
-                        .start()
-                        .await;
-                    
-                    println!("Sending first voice item!");
-
-                    if _forward_tx.send(Ok(item)).await.is_err() {
-                        println!("Error sending initial voice data to transcriber! Restarting...");
+            //println!("Getting Deepgram stream...");
+            let _token = token.clone();
+            
+            tokio::task::spawn(async move {
+                loop {
+                    let _token = _token.clone();
+                    if _token.is_cancelled() {
                         continue;
                     }
-                    println!("Sent first voice item!");
 
-                    if let Ok(mut results) = results {
-                        let _token = token.clone();
-                        while let Some(result) = results.next().await {
-                            let _token = _token.clone();
-    
-                            if _token.is_cancelled() {
-                                continue;
+                    let stream_clone = stream.clone();
+
+                    let item = stream.lock().await.recv().await.clone();
+                    
+                    if let Ok(item) = item {
+
+                        println!("GOT VOICE DATA ITEM!");
+                        let (mut forward_tx, mut forward_rx) = mpsc::channel::<Result<Bytes>>(16);
+
+                        let is_terminated = Arc::new(Mutex::new(false));
+        
+                        let _is_terminated = is_terminated.clone();
+
+                        let mut _forward_tx = forward_tx.clone();
+
+                        // Start a task to forward items from the original stream to the new stream
+                        tokio::spawn(async move {
+                            let mut locked_stream = stream_clone.lock().await;
+
+                            while let Ok(item) = locked_stream.recv().await {
+                                let _token = _token.clone();
+                                if _token.is_cancelled() {
+                                    continue;
+                                }
+        
+                                if _is_terminated.lock().await.to_owned() {
+                                    break;
+                                }
+                                if forward_tx.send(Ok(item)).await.is_err() {
+                                    //panic!("STREAM ERROR");
+                                    break;
+                                }
                             }
-    
-                            match result {
-                                Ok(result) => {
-                                    match result {
-                                        TranscriptResponse { duration, is_final, channel } => {
-                                            let mut transcript_responses = Vec::<TranscriptionResponse>::new();
+                        });
+        
+                        let dg = Deepgram::new(env::var("DEEPGRAM_API_KEY").unwrap());
+        
+                        //println!("Getting Deepgram results...");
+                        
+                        let mut results = dg
+                            .transcription()
+                            .stream_request()
+                            .stream(forward_rx)
+                            // TODO Enum.
+                            .encoding("linear16".to_string())
+                            // TODO Specific to my machine, not general enough example.
+                            .sample_rate(sample_rate)//44100)
+                            // TODO Specific to my machine, not general enough example.
+                            .channels(2)
+                            .start()
+                            .await;
+                        
+                        println!("Sending first voice item!");
 
-                                            let first_alternative = &channel.alternatives.first().unwrap();
-                                            for word in first_alternative.words.iter() {
-                                                if word.confidence < 0.5 {
-                                                    transcript_responses.push(TranscriptionResponse { speaker: None, transcript: word.word.clone() });
-                                                } else {
-                                                    if let Some(mut last) = transcript_responses.last_mut() {
-                                                        if word.speaker == last.speaker {
-                                                            last.transcript += &(" ".to_string() + word.word.as_str());
-                                                            continue;
-                                                        }
-                                                    }
-                                                    transcript_responses.push(TranscriptionResponse { speaker: word.speaker.clone(), transcript: word.word.clone() });
-                                                }
-                                            }
-                                            
-                                            //let transcript = first_alternative.transcript;
-                                            //println!("Transcript: {:?}", transcript);
-
-                                            for response in transcript_responses {
-                                                println!("[Speaker:{:?}] {:?}", response.speaker, response.transcript);
-                                                async_tx.send(Ok(response.clone())).await;
-                                            }
-                                        },
-                                        TerminalResponse { request_id, created, duration, channels } => {
-                                            *is_terminated.lock().await = true;
-                                            // Connection closed--will need to reconnect
-                                            //async_tx.close().await;
-                                            //break;
-                                            //panic!("Deepgram terminated");
-                                            break;
-                                        },
-                                    }
-                                },
-                                Err(err) => {
-                                    println!("DEEPGRAM ERROR: {}", err.to_string())
-                                },
-                            }
+                        if _forward_tx.send(Ok(item)).await.is_err() {
+                            println!("Error sending initial voice data to transcriber! Restarting...");
+                            continue;
                         }
-                    } else {
-                        println!("ERROR: Failed to get Deepgram transcription!");
-                        break;
+                        println!("Sent first voice item!");
+
+                        if let Ok(mut results) = results {
+                            let _token = token.clone();
+                            while let Some(result) = results.next().await {
+                                let _token = _token.clone();
+        
+                                if _token.is_cancelled() {
+                                    continue;
+                                }
+        
+                                match result {
+                                    Ok(result) => {
+                                        match result {
+                                            TranscriptResponse { duration, is_final, channel } => {
+                                                let mut transcript_responses = Vec::<TranscriptionResponse>::new();
+
+                                                let first_alternative = &channel.alternatives.first().unwrap();
+                                                for word in first_alternative.words.iter() {
+                                                    if word.confidence < 0.5 {
+                                                        transcript_responses.push(TranscriptionResponse { speaker: None, transcript: word.word.clone() });
+                                                    } else {
+                                                        if let Some(mut last) = transcript_responses.last_mut() {
+                                                            if word.speaker == last.speaker {
+                                                                last.transcript += &(" ".to_string() + word.word.as_str());
+                                                                continue;
+                                                            }
+                                                        }
+                                                        transcript_responses.push(TranscriptionResponse { speaker: word.speaker.clone(), transcript: word.word.clone() });
+                                                    }
+                                                }
+                                                
+                                                //let transcript = first_alternative.transcript;
+                                                //println!("Transcript: {:?}", transcript);
+
+                                                for response in transcript_responses {
+                                                    println!("[Speaker:{:?}] {:?}", response.speaker, response.transcript);
+                                                    async_tx.send(Ok(response.clone())).await;
+                                                }
+                                            },
+                                            TerminalResponse { request_id, created, duration, channels } => {
+                                                *is_terminated.lock().await = true;
+                                                // Connection closed--will need to reconnect
+                                                //async_tx.close().await;
+                                                //break;
+                                                //panic!("Deepgram terminated");
+                                                break;
+                                            },
+                                        }
+                                    },
+                                    Err(err) => {
+                                        println!("DEEPGRAM ERROR: {}", err.to_string())
+                                    },
+                                }
+                            }
+                        } else {
+                            println!("ERROR: Failed to get Deepgram transcription!");
+                            break;
+                        }
                     }
+
                 }
+            });
 
+            Ok(async_rx)
+        } else {
+            
+            todo!();
+            /*
+            let dg = Deepgram::new(env::var("DEEPGRAM_API_KEY").unwrap());
+
+            let receiver = empathic_audio::volume_vad_filter(stream);
+            while let Some(item) = receiver.recv().await {
+                dg.transcription().prerecorded(deepgram::transcription::prerecorded::audio_source::AudioSource::from_buffer(item), deepgram::transcription::prerecorded::options::OptionsBuilder::new().detect_language(true).language(language))
             }
-        });
+             */
 
-        Ok(async_rx)
+        }
     }
 }
 

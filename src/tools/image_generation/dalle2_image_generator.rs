@@ -12,9 +12,9 @@ impl ImageGenerator for Dalle2ImageGenerator {
     async fn get_image(&self, description: String) -> Result<ImageResult> {
         let client = Client::new(env::var("OPENAI_API_KEY").unwrap().to_string());
         let image_response = client.image_generation(ImageGenerationRequest::new(description))?;
-        let url = image_response.data[0].clone();
+        let url = &image_response.data[0];
 
-        let bytes = reqwest::get(url.url).await?.bytes().await?;
+        let bytes = reqwest::get(url.url.clone()).await?.bytes().await?;
 
         Ok(ImageResult { bytes: bytes.to_vec() })
     }

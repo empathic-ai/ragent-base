@@ -27,7 +27,11 @@ lazy_static! {
         // Old smexy frog voice, more gritty
         map.insert("man-a".to_string(), "N2lVS1w4EtoT3dr4eOWO".to_string());
         // Anatra voice
-        map.insert("child".to_string(),"gkvpzrzujkR7osK9HAgg".to_string());
+        map.insert("child-a".to_string(),"gkvpzrzujkR7osK9HAgg".to_string());
+        // Baby chick voice
+        map.insert("child-b".to_string(), "Z8aiHDBl5U16BuihS7ss".to_string());
+        // Bearsworth voice
+        map.insert("silly-man".to_string(), "542jzeOaLKbcpZhWfJDa".to_string());
         // Old anatra voice
         //map.insert("anatra".to_string(), "F9UvutjrG9l2yvDB2zSt".to_string());
         map
