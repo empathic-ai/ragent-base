@@ -9,9 +9,11 @@ pub use deepgram_transcriber::*;
 
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(target_arch = "xtensa"))]
+#[cfg(feature = "candle")]
 pub mod whisper_transcriber;
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(target_arch = "xtensa"))]
+#[cfg(feature = "candle")]
 pub use whisper_transcriber::*;
 
 #[cfg(target_arch = "wasm32")]

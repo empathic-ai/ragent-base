@@ -13,6 +13,7 @@ use candle_transformers::models::quantized_mixformer::MixFormerSequentialForCaus
 
 use candle_transformers::models::phi::{Config as PhiConfig, Model as Phi};
 use candle_transformers::models::phi3::{Config as Phi3Config, Model as Phi3};
+#[cfg(not(target_arch = "wasm32"))]
 use hf_hub::api::sync::Api;
 use hf_hub::Repo;
 use hf_hub::RepoType;
@@ -58,6 +59,7 @@ pub struct Model {
     tokens: Vec<u32>,
     repeat_penalty: f32,
     repeat_last_n: usize,
+    #[cfg(not(target_arch = "wasm32"))]
     verbose_prompt: bool,
 }
 
@@ -98,7 +100,7 @@ struct Args {
 }
 
 impl Model {
-
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn new(args: Args) -> Result<Self> {
   
         println!(
@@ -318,7 +320,7 @@ impl Model {
         let logits_processor = LogitsProcessor::new(299792458, None, None);
         Ok(Self {
             model,
-            tokenizer,
+            tokenizer: TokenOutputStream::new(tokenizer),
             tokens: vec![],
             logits_processor,
             repeat_penalty: 1.,
@@ -493,6 +495,7 @@ impl CandleChatCompleter {
 
 #[async_trait]
 impl ChatCompleter for CandleChatCompleter {
+    #[cfg(not(target_arch = "wasm32"))]
     async fn get_response(&mut self, messages: Vec<super::ChatCompletionMessage>, task_configs: Vec<TaskConfig>) -> Result<Pin<Box<dyn Stream<Item = Result<super::ChatCompletionResponse>> + Send>>> {
 
         let mut prompt = "".to_string();
@@ -534,5 +537,11 @@ impl ChatCompleter for CandleChatCompleter {
             }
         });
         Ok(Box::pin(stream))
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    async fn get_response(&mut self, messages: Vec<super::ChatCompletionMessage>, task_configs: Vec<TaskConfig>) -> Result<Pin<Box<dyn Stream<Item = Result<super::ChatCompletionResponse>> + Send>>> {
+        // Refer to existing wasm32 supported code above
+        todo!()
     }
 }

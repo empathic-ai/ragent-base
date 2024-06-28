@@ -8,4 +8,5 @@ pub use image_generation::prelude::*;
 pub use voice_synthesis::prelude::*;
 pub use voice_transcription::*;
 
+#[cfg(feature = "candle")]
 pub mod candle_helpers;
