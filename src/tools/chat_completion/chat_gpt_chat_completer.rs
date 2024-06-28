@@ -36,7 +36,7 @@ impl ChatCompleter for ChatGPTChatCompleter {
 
         let mut messages: Vec<_> = messages.into_iter().map(|message| {
 
-            dbg!(message.clone());
+            //dbg!(message.clone());
             openai_api_rs::v1::chat_completion::ChatCompletionMessage {
                 role: match message.role {
                     chat_completion::MessageRole::user =>  openai_api_rs::v1::chat_completion::MessageRole::user,
@@ -50,7 +50,7 @@ impl ChatCompleter for ChatGPTChatCompleter {
                         vec![
                             openai_api_rs::v1::chat_completion::ImageUrl {
                                 r#type: openai_api_rs::v1::chat_completion::ContentType::image_url,
-                                text: Some(image_url[0].text.clone().unwrap()),
+                                text: None,
                                 image_url: Some(openai_api_rs::v1::chat_completion::ImageUrlType { url: image_url[0].image_url.clone().unwrap().url })
                             }
                         ]
@@ -113,11 +113,17 @@ impl ChatCompleter for ChatGPTChatCompleter {
         let stream = stream.map(|x| {
             match x {
                 Ok(x) => {
-                    let completion_response = x.choices[0].delta.as_ref().unwrap().content.clone().unwrap_or("".to_string());
-                    println!("GOT RESPONSE: {}", completion_response);
-                    Ok(super::ChatCompletionResponse {
-                        completion: completion_response
-                    })
+                    if let Some(delta) = x.choices[0].delta.as_ref() {
+                        let completion_response = delta.content.clone().unwrap_or("".to_string());
+                        println!("GOT RESPONSE: {}", completion_response);
+                        Ok(super::ChatCompletionResponse {
+                            completion: completion_response
+                        })
+                    } else {
+                        Ok(super::ChatCompletionResponse {
+                            completion: "".to_string()
+                        })
+                    }
                 },
                 Err(e) => {
                     println!("ERROR GETTING CHAT RESPONSE: {}", e);

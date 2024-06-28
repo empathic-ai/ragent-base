@@ -35,10 +35,28 @@ impl ChatCompleter for ClaudeChatCompleter {
 
         let client = Client::try_from(cfg)?;
 
+        let mut messages: Vec<Message> = messages.into_iter().map(|message| {
+
+            dbg!(message.clone());
+            Message {
+                role: match message.role {
+                    chat_completion::MessageRole::user => anthropic::types::Role::User,
+                    chat_completion::MessageRole::system => anthropic::types::Role::User,
+                    chat_completion::MessageRole::assistant => anthropic::types::Role::Assistant,
+                    chat_completion::MessageRole::function => anthropic::types::Role::Assistant,
+                },
+                content: match message.content {
+                    super::Content::Text(text) => vec![ContentBlock::Text { text: text }],
+                    // TODO: Requires changes to work
+                    super::Content::ImageUrl(image_url) => vec![ContentBlock::Image { source: "base64".to_string(), media_type: "image/jpeg".to_string(), data: todo!() }]
+                }
+            }
+        }).collect();
+
         let message_request = MessagesRequestBuilder::default()
-        .model("claude-3".to_string())
+        .model("claude-3-5-sonnet".to_string())
         //.max_tokens_to_sample(256usize)
-        .stream(true)
+        .stream(true).messages(messages)
         .stop_sequences(vec![HUMAN_PROMPT.to_string()])
         .build()?;
 

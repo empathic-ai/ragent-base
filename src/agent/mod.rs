@@ -284,85 +284,6 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
     }
     */
 
-    async fn output_tasks(&mut self, temp_commands: String, is_end: bool, token: CancellationToken) -> String {
-        if temp_commands.is_empty() {
-            return "".to_string();
-        }
-
-        let mut temp_commands = temp_commands;
-        
-        if is_end {
-            temp_commands += ")";
-        }
-
-        //println!("Parsing tasks from response: '{}'.", temp_commands);
-
-        let (text_tasks, mut dangling_text_task) = get_commands(&temp_commands);
-
-        for text_task in text_tasks {
-            let r = Regex::new(r#"(.*?)(?=\()"#).unwrap();
-            //println!("{}", command.clone());
-            let _command = text_task.clone();
-            let command_name = r.captures(&_command).unwrap();
-
-            if let Some(command_name) = command_name {
-                let task_name = command_name[0].to_string();
-
-                let args = text_task.substring(task_name.chars().count() + 1,text_task.chars().count() - 1).to_string();
-
-                let args = self.parse_arguments(&args);
-
-                if !(task_name == get_event_name_from_type::<VoiceEventArgs>() || task_name == get_event_name_from_type::<SpeakEvent>()) {
-                    //self.config.task_configs
-                    self.call_function(task_name, args, token.clone()).await;
-                    //if let Some(type_info) = Named::default().get_represented_type_info() {
-                    //    if let bevy::reflect::TypeInfo::Enum(enum_info) = type_info {
-                    //        enum_info.variant(&command_name);
-                    //    }
-                    //}
-                    //println!("Created new user task named '{}' with args '{}'.", command_name, args);
-                } else {
-                    self.process_speech(task_name, args, token.clone()).await;
-                }
-            } else {
-                //println!("Failed to create command from dangling text: '{}'.", command.clone());
-            }
-        }
-
-        //println!("Dangling text tasks: {}", dangling_text_task);
-        
-        let r = Regex::new(r#"(.*?)(?=\()"#).unwrap();
-        let mut t = dangling_text_task.clone();
-        let mut _t = dangling_text_task.clone();
-        let mut dangling_task_name = r.captures(&_t).unwrap();
-
-        // If there is a space later on in the string, process it as a speech command
-        if dangling_task_name.is_none() && dangling_text_task.trim_start_matches("\n").trim_start().contains(' ') {
-            //dangling_text_task = r#"speak("default", "default", "#.to_string() + &dangling_text_task;
-            dangling_text_task = r#"speak("#.to_string() + &dangling_text_task;
-            t = dangling_text_task.clone();
-            dangling_task_name = r.captures(&t).unwrap();
-        }
-
-        if let Some(dangling_task_name) = dangling_task_name {
-            let dangling_task_name = dangling_task_name[0].to_string();
-      
-            //println!("Dangling task name found: {}", dangling_task_name);
-
-            if (dangling_task_name == get_event_name_from_type::<VoiceEventArgs>() || dangling_task_name == get_event_name_from_type::<SpeakEvent>()) {
-                let args = dangling_text_task.substring(dangling_task_name.chars().count() + 1, dangling_text_task.chars().count()).to_string();
-                let args = self.parse_arguments(&args);
-
-                // TODO: Write more efficiently
-                if dangling_task_name == get_event_name_from_type::<VoiceEventArgs>() && (args.len() > 2 && args[2] != "\"" && args[2] != "\'") {
-                    dangling_text_task = self.process_speech(dangling_task_name, args.clone(), token.clone()).await;
-                } else if dangling_task_name == get_event_name_from_type::<SpeakEvent>() && (args.len() > 0 && args[0] != "\"" && args[0] != "\'") {
-                    dangling_text_task = self.process_speech(dangling_task_name, args.clone(), token.clone()).await;
-                }
-            }
-        }
-        dangling_text_task
-    }
 
         /*
     async fn output_task_streams(&mut self, command_name: &str, args: String) {
@@ -396,142 +317,12 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
 
     async fn try_recv_event(&mut self) -> Result<UserEvent>;
 
-    async fn process_speech(&mut self, ev_name: String, mut args: Vec<String>, token: CancellationToken) -> String {
-        println!("Processing speech: {}", args.join(", "));
-
-        let length = args.len();
-        //let re: Regex = Regex::new(r#".*?(?:\n|\r|\.|\?|!|,)"#).unwrap();
-        let re: Regex = Regex::new(r#".*?(?:\n|\r|\.|\?|!)"#).unwrap();
-
-        let speech_text = args[length-1].clone();
-        let captures = re.find_iter(&speech_text);
-
-        let mut processed_speech: String = "".to_string();
-        for sentence in captures {
-            let speech_text = sentence.unwrap().as_str().to_string();
-
-            if !speech_text.trim_matches('.').trim_matches(',').trim_matches('!').trim_matches('?').is_empty() && speech_text != "\"" && speech_text != "\"" {
-                processed_speech += &speech_text;
-
-                let mut _args = args.clone();
-                _args[length-1] = speech_text.clone();
-    
-                self.call_function(ev_name.clone(), _args, token.clone()).await.expect("Failed to call function");
-            }
-        }
-
-        let dangling_speech_text = speech_text.substring(processed_speech.len(), speech_text.len()).trim();
-
-        args[length-1] = dangling_speech_text.to_string();
-
-        let mut speech = ev_name.clone() + "(";
-        for i in (0..length) {
-            let arg = args[i].clone();
-            if i == length-1 {
-                speech = speech + "\"" + &arg;
-            } else {
-                speech = speech + "\"" + &arg + "\", ";
-            }
-        }
-        //let speech = format!(r#"speak("{}", "{}", "{}"#, args[0], args[1], dangling_speech_text);
-
-        //log(format!("Processed speech: {}\nDangling: {}", processed_speech.clone(), speech.clone()));
-
-        speech
-    }
-
     fn wrap_speech_text(&self, speaker: String, speech_text: String) -> String {
         format!(r#"speak("{}")"#, speech_text.trim().trim_matches('\'').trim_matches('"'))
     }
     
-    async fn process_user_event(&mut self, ev: UserEvent) -> Result<()> {
 
-        let ev_description = ev.get_event_description()?;
-        log(format!("Processing event: {}", ev_description));
 
-        // Todo: Abort previous future if new submission is received (see OpenAI playground for recommendations)
-       
-        //log(format!("AGENT RECEVED TASK OF TYPE {}", user_task.args.0.type_name()));
-
-        // TODO: handle other task types
-        //if user_task.AuthorUserId == self.userId {
-        //    return;
-        //}
-        //let _self = Arc::new(self);
-        //let _self = Arc::clone(&self);
-
-        if !self.get_config().task_configs_by_name.contains_key(&ev.get_event_name()?) {
-            println!("Task doesn't exist in agent config!");
-            return Ok(());
-        }
-
-        let content = match ev.user_event_type.unwrap() {
-            UserEventType::ImageBytesEvent(ev) => {
-                let data = base64::encode(ev.data.clone());
-                let v = vec![ImageUrl { r#type: ContentType::image_url, text: None, image_url: Some(ImageUrlType { url: format!("data:image/jpeg;base64,{}",data) }) }];
-                Content::ImageUrl(v)
-            },
-            _ => {
-                Content::Text(ev_description)    
-            }
-        };
-        //for arg in ev.args.0.as_ref()
-
-        //let speech_task = ev.args.into_reflect().downcast::<SpeakEventArgs>().unwrap();
-
-        let user_id = self.get_user_id();
-        //let prompt_text = Self::wrap_speech_text(speech_task.voice_name, speech_task.text.clone());
-        
-        //println!("Processing prompt: {}", prompt_text);
-
-        let role = if ev.user_id.clone().unwrap() == user_id {
-            Role::Agent
-        } else {
-            Role::Human
-        };
-
-        //for message in self.messages.to_vec() {
-        //    println!("{:?}: {}", message.role.unwrap(), message.content.unwrap());
-        //}
-
-        if ev.user_id.unwrap() == user_id {
-            return Ok(());
-        }
-
-        //let (sx, rx) = async_channel::unbounded::<Pin<Box<dyn Future<Output = ()>>>>();
-
-        //let character_name = self.get_config().name.clone();
-
-        //let is_system = false;
-
-        //let _voice_name = self.config.azure_voice_name.clone();
-        //let _uberduck_id = self.config.uberduck_id;
-
-        //let use_camera = self.use_camera;
-
-        //let _self = Arc::clone(&_self);
-        //let sx = sx.clone();
-
-        // Gets response from ChatGPT
-
-        //let prompt_text = prompt_text;
-        self.new_message(role, content);
-        self.get_some_response().await?;
- 
-        Ok(())
-    }
-
-    async fn get_some_response(&mut self) -> Result<()> {
-        if let Some(token) = self.get_current_token() {
-            token.cancel();
-        }
-        let token = CancellationToken::new();
-        self.set_current_token(Some(token.clone()));
-
-        self.get_response(token).await?;
-        Ok(())
-    }
-        
     fn parse_partial_json(&self, json_str: &str) -> (bool, Result<Value>) {
         let mut well_formed_json = String::from(json_str);
     
@@ -547,90 +338,10 @@ pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
         (open_braces == 0, serde_json::from_str(&well_formed_json).map_err(|err| anyhow!(err)))
     }
  
-    async fn call_function_with_map(&mut self, name: String, arguments: HashMap<String, String>, token: CancellationToken) -> Result<()> {
-        if let Some(task_config) = self.get_config().task_configs_by_name.get(&name) {
-            let mut _arguments = Vec::<String>::new();
-            
-            for parameter in task_config.parameters.clone() {
-                let argument = arguments.get(&parameter.name).unwrap();
-                _arguments.push(argument.to_owned());
-            }
-            self.call_function(name, _arguments, token).await?;
-        }
-        Ok(())
-    }
 
-    async fn call_function(&mut self, name: String, arguments: Vec<String>, token: CancellationToken) -> Result<()> {
-        let args_description = arguments.join(", ");
-        //log(format!("SENDING RESPONSE: {name}({args_description})"));
-
-        if let Some(task_config) = self.get_config().task_configs_by_name.get(&name) {
-            let event_type = (task_config.create_task)(arguments)?;
-
-            let ev = UserEvent::new(self.get_user_id().clone(), self.get_space_id().clone(), event_type);
-            self.new_message(Role::Agent, Content::Text(ev.get_event_description()?));
-            self.output_event(ev.clone()).await?;
-            Ok(())
-        } else {
-            Err(anyhow!("Failed to find task config!"))
-        }
-    }
 
     async fn stop(&mut self) -> Result<()>;
 
-    fn parse_arguments(&self, input: &str) -> Vec<String> {
-        let mut args = Vec::new();
-        let mut current_arg: Option<String> = None;
-        let mut in_quotes = false;
-        let mut in_single_quotes = false;
-    
-        for c in input.chars() {
-            match c {
-                '"' => {
-                    in_quotes = !in_quotes;
-                    if in_quotes {
-                        if current_arg.is_none() {
-                            current_arg = Some("".to_string());
-                        }
-                    }
-                }
-                '\'' => {
-                    if !in_quotes {
-                        in_single_quotes = true;
-                        in_quotes = true;
-                    } else {
-                        if in_single_quotes {
-                            in_quotes = false;
-                            in_single_quotes = false;
-                        } else {
-                            current_arg = Some(current_arg.unwrap() + &c.to_string());
-                        }
-                    }
-                }
-                ',' => {
-                    if in_quotes {
-                        current_arg = Some(current_arg.unwrap() + &c.to_string());
-                    } else {
-                        args.push(current_arg.unwrap().trim().to_string());
-                        current_arg = Some("".to_string());
-                    }
-                }
-                _ => {
-                    if current_arg.is_none() {
-                        current_arg = Some("".to_string());
-                    }
-                    current_arg = Some(current_arg.unwrap() + &c.to_string());
-                }
-            }
-        }
-        
-        // Append the last argument if it's not empty
-        if current_arg.is_some() {
-            args.push(current_arg.unwrap().trim().to_string());
-        }
-    
-        args
-    }
 }
 
 #[derive(Clone)]
@@ -650,58 +361,6 @@ speak(<text>) - The assistant speaks the provided text. Example: speak(How can I
 music(<genre>) - Music plays in the provided genre. Example: music(How can I help you?)
 */
 
-fn get_commands(input: &str) -> (Vec<String>, String) {
-    let mut result = Vec::new();
-    let mut current = String::new();
-    let mut paranthesis_count = 0;
-    let mut dangling_text = "".to_string();
-    let mut in_quotes = false;
-
-    for c in input.trim_start().trim_start_matches('(').chars() {
-        match c {
-            '"' => {
-                in_quotes = !in_quotes;
-                current.push(c);
-                dangling_text.push(c);
-            },
-            '(' => {
-                if in_quotes {
-                    current.push(c);
-                    dangling_text.push(c);
-                } else {
-                    //if paranthesis_count > 0 {
-                    current.push(c);
-                    //}
-                    dangling_text.push(c);
-                    paranthesis_count += 1;
-                }
-            }
-            ')' => {
-                if in_quotes {
-                    current.push(c);
-                    dangling_text.push(c);
-                } else {
-                    paranthesis_count -= 1;
-                    if paranthesis_count > 0 {
-                        current.push(c);
-                    } else {
-                        current.push(c);
-                        result.push(current.trim_start().to_string());
-                        current = String::new();
-
-                        dangling_text = "".to_string();
-                    }
-                }
-            }
-            _ => {
-                current.push(c);
-                dangling_text.push(c);
-            }
-        }
-    }
-    dangling_text = dangling_text.trim_start().to_string();
-    (result, dangling_text)
-}
 
 //#[derive(Component)]
 pub struct AgentState<T> where T: Agent {
