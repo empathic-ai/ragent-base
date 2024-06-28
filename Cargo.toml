@@ -9,10 +9,11 @@ description = "A framework for building LLM agents."
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
-default = ["bevy"]
+default = ["bevy", "candle"]
 server = []
 # TODO: Finish non-bevy implementation (or make bevy non-optional)
 bevy = ["dep:bevy", "ragent_core/bevy", "common/bevy", "bevy_builder"]
+candle = ["candle-core", "candle-nn", "candle-transformers"]
 
 [dependencies]
 bevy_builder = { git = "https://github.com/empathic-ai/bevy-builder.git", optional = true }
@@ -53,12 +54,17 @@ tracing-chrome = "0.7.2"
 tracing-subscriber = "0.3.18"
 rand = "0.8.5"
 byteorder = "1.5.0"
-symphonia = { version = "0.5.4", features = ["all"] }
+symphonia = { version = "0.5.4", default-features = false }
 blake3 = { version = "1.5.1", features = ["pure"] }
+
+candle-core = { git = "https://github.com/huggingface/candle.git", optional = true }
+candle-nn = { git = "https://github.com/huggingface/candle.git", optional = true }
+candle-transformers = { git = "https://github.com/huggingface/candle.git", optional = true }
 
 # Removed feature due to web compatibility issues: "jpeg"
 image = { version = "0.25.0", default-features = false, features = ["png"] }
 async-stream = "0.3.5"
+my-workspace-hack = { version = "0.1", path = "../../../my-workspace-hack" }
 
 [target.'cfg(not(target_arch = "xtensa"))'.dependencies]
 reqwest = { version = "0.12.4", features = ["json", "stream"] }

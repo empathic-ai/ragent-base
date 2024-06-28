@@ -3,6 +3,7 @@ use bytes::Bytes;
 use anyhow::Result;
 use std::collections::HashMap;
 
+#[cfg(feature = "candle")]
 pub mod candle_image_captioner;
 
 pub struct ImageCaption {
@@ -14,6 +15,7 @@ pub trait ImageCaptioner {
 }
 
 pub mod prelude {
+    #[cfg(feature = "candle")]
     pub use super::candle_image_captioner::*;
     pub use super::*;
 }

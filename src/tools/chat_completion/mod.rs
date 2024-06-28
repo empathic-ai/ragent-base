@@ -18,7 +18,9 @@ pub mod chat_gpt_chat_completer;
 #[cfg(not(target_os = "android"))]
 pub use chat_gpt_chat_completer::*;
 
+#[cfg(feature = "candle")]
 pub mod candle_chat_completer;
+#[cfg(feature = "candle")]
 pub use candle_chat_completer::*;
 
 use async_trait::async_trait;
