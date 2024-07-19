@@ -52,14 +52,13 @@ impl UserEventType {
     pub fn from<T>(event_args: Vec<String>) -> Result<UserEventType> where T: Task + Typed {
         let event_name = get_event_name_from_type::<T>();
 
-        for event_arg in event_args.iter() {
-            println!("Event arg: {}", event_arg);
-        }
-        
+        //for event_arg in event_args.iter() {
+            //println!("Event arg: {}", event_arg);
+        //}
     
         if let TypeInfo::Enum(enum_info) = UserEventType::type_info() {
             let variant_name = *enum_info.variant_names().iter().find(|x| get_event_name_from_type_name(x) == event_name).unwrap();
-            println!("Variant name: {}", variant_name);
+            //println!("Variant name: {}", variant_name);
             
             if let Some(VariantInfo::Tuple(variant_info)) = enum_info.variant(variant_name.clone()) {
                 //println!("{}", variant_info.name());
@@ -68,7 +67,7 @@ impl UserEventType {
 
                     let mut data = DynamicStruct::default();
                     for i in 0..event_args.len() {
-                        let field = struct_info.field_at(i).expect(&format!("Failed to find field at index {} in type {}", i, event_name));
+                        let field = struct_info.field_at(i).expect(&format!("Failed to find field at index {} in type {}. Full args: {:?}", i, event_name, event_args));
                         data.insert(field.name(), event_args[i].clone());
                     }
     
@@ -175,13 +174,21 @@ impl UserEventType {
 }
 
 impl UserEvent {
-    pub fn new(user_id: Thing, space_id: Thing, ev: UserEventType) -> Self{
+    pub fn new(user_id: Option<Thing>, space_id: Thing, ev: UserEventType) -> Self{
         UserEvent {
-            user_id: Some(user_id),
+            user_id: user_id,
             space_id: Some(space_id),
+            context_id: None,
             user_event_type: Some(ev)
-            //args: task,
-            //created_time: Some(SystemTime::now())
+        }
+    }
+
+    pub fn new_with_context(user_id: Option<Thing>, space_id: Thing, context_id: Thing, ev: UserEventType) -> Self{
+        UserEvent {
+            user_id: user_id,
+            space_id: Some(space_id),
+            context_id: Some(context_id),
+            user_event_type: Some(ev),
         }
     }
 

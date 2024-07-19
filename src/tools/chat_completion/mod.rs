@@ -1,12 +1,14 @@
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(target_arch = "xtensa"))]
 #[cfg(not(target_os = "android"))]
+#[cfg(feature = "anthropic")]
 pub mod claude_chat_completer;
 use std::pin::Pin;
 
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(target_arch = "xtensa"))]
 #[cfg(not(target_os = "android"))]
+#[cfg(feature = "anthropic")]
 pub use claude_chat_completer::*;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -29,6 +31,8 @@ use serde::{Deserialize, Serialize};
 use crate::prelude::*;
 use futures_util::{Stream, FutureExt, StreamExt, stream, TryStreamExt};
 use anyhow::Result;
+
+use dyn_clone::DynClone;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[allow(non_camel_case_types)]
@@ -123,6 +127,6 @@ pub struct FunctionParameters {
 }
 
 #[async_trait]
-pub trait ChatCompleter: Send + Sync {
+pub trait ChatCompleter: Send + Sync + DynClone {
     async fn get_response(&mut self, messages: Vec<ChatCompletionMessage>, task_configs: Vec<TaskConfig>) -> Result<Pin<Box<dyn Stream<Item = Result<ChatCompletionResponse>> + Send>>>;
 }

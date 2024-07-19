@@ -10,6 +10,7 @@ pub mod dalle2_image_generator;
 
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(target_os = "android"))]
+#[cfg(feature = "candle")]
 pub mod candle_image_generator;
 
 pub struct ImageResult {
@@ -27,6 +28,7 @@ pub mod prelude {
     pub use super::dalle2_image_generator::*;
     #[cfg(not(target_arch = "wasm32"))]
     #[cfg(not(target_os = "android"))]
+    #[cfg(feature = "candle")]
     pub use super::candle_image_generator::*;
     pub use super::*;
 }

@@ -76,6 +76,7 @@ message VoiceStreamRequest {
 message UserEvent {
   Thing user_id = 1;
   Thing space_id = 2;
+  optional Thing context_id = 3;
   // This is a placeholder comment.
   oneof user_event_type {
     SpeakBytesEvent speak_bytes_event = 100;
@@ -139,6 +140,7 @@ message ImageBytesEvent {
 // This is a placeholder comment.
 message SpeakResultEvent {
   string asset_id = 1;
+  string text = 2;
 }
 
 // This is a placeholder comment.

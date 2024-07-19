@@ -24,6 +24,7 @@ pub mod azure_synthesizer;
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(target_arch = "xtensa"))]
 #[cfg(not(target_os = "android"))]
+#[cfg(feature = "candle")]
 pub mod candle_synthesizer;
 
 pub mod coqui_synthesizer;

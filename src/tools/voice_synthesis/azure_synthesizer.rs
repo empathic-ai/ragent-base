@@ -21,7 +21,8 @@ lazy_static! {
         map.insert("woman-c".to_string(), "en-US-NancyNeural".to_string());
         //map.insert("soft-man".to_string(), "".to_string());
         map.insert("deep-man".to_string(), "en-US-en-US-DavisNeural".to_string());
-        map.insert("child".to_string(), "en-US-AnaNeural".to_string());
+        map.insert("child-a".to_string(), "en-US-AnaNeural".to_string());
+        map.insert("child-b".to_string(), "en-US-AnaNeural".to_string());
         map
     };
 }

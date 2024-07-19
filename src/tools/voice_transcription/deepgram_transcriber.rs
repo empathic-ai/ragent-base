@@ -69,7 +69,7 @@ impl Transcriber for DeepgramTranscriber {
                     
                     if let Ok(item) = item {
 
-                        println!("GOT VOICE DATA ITEM!");
+                        //println!("GOT VOICE DATA ITEM!");
                         let (mut forward_tx, mut forward_rx) = mpsc::channel::<Result<Bytes>>(16);
 
                         let is_terminated = Arc::new(Mutex::new(false));
@@ -115,13 +115,13 @@ impl Transcriber for DeepgramTranscriber {
                             .start()
                             .await;
                         
-                        println!("Sending first voice item!");
+                        //println!("Sending first voice item!");
 
                         if _forward_tx.send(Ok(item)).await.is_err() {
                             println!("Error sending initial voice data to transcriber! Restarting...");
                             continue;
                         }
-                        println!("Sent first voice item!");
+                        //println!("Sent first voice item!");
 
                         if let Ok(mut results) = results {
                             let _token = token.clone();
@@ -157,7 +157,7 @@ impl Transcriber for DeepgramTranscriber {
                                                 //println!("Transcript: {:?}", transcript);
 
                                                 for response in transcript_responses {
-                                                    println!("[Speaker:{:?}] {:?}", response.speaker, response.transcript);
+                                                    //println!("[Speaker:{:?}] {:?}", response.speaker.unwrap(), response.transcript);
                                                     async_tx.send(Ok(response.clone())).await;
                                                 }
                                             },

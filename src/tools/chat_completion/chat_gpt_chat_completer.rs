@@ -115,7 +115,7 @@ impl ChatCompleter for ChatGPTChatCompleter {
                 Ok(x) => {
                     if let Some(delta) = x.choices[0].delta.as_ref() {
                         let completion_response = delta.content.clone().unwrap_or("".to_string());
-                        println!("GOT RESPONSE: {}", completion_response);
+                        //println!("GOT RESPONSE: {}", completion_response);
                         Ok(super::ChatCompletionResponse {
                             completion: completion_response
                         })

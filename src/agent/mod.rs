@@ -29,11 +29,23 @@ use anyhow::anyhow;
 
 use async_trait::async_trait;
 
-pub mod base_agent;
-pub use base_agent::*;
+pub mod agent_worker;
+pub use agent_worker::*;
+
+pub mod converter_worker;
+pub use converter_worker::*;
+
+pub mod microphone_worker;
+pub use microphone_worker::*;
+
+pub mod speaker_worker;
+pub use speaker_worker::*;
 
 pub mod user_agent;
 pub use user_agent::*;
+
+pub mod audio_buffer;
+pub use audio_buffer::*;
 
 //use crate::{types::*, NEW_IMAGE, RESPONSE_ERROR};
 
@@ -66,6 +78,15 @@ lazy_static! {
 pub enum Role {
     Human,
     Agent
+}
+
+#[bevy_trait_query::queryable]
+pub trait UserEventWorker {
+    fn is_valid_space(&self, space_id: &Thing) -> Result<bool>;
+
+    fn send_event(&mut self, ev: UserEvent) -> Result<()>;
+
+    fn try_recv_event(&mut self) -> Result<UserEvent>;
 }
 
 /* 
