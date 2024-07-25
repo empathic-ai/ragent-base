@@ -21,7 +21,7 @@ bevy_builder = { git = "https://github.com/empathic-ai/bevy-builder.git", option
 ragent_core = { git = "https://github.com/empathic-ai/ragent-core.git", default-features = false }
 ragent_derive = { git = "https://github.com/empathic-ai/ragent-derive.git" }
 empathic_audio = { git = "https://github.com/empathic-ai/empathic-audio.git" }
-bevy-trait-query = { git = "https://github.com/RobWalt/bevy-trait-query.git", optional = true }
+bevy-trait-query = { git = "https://github.com/dead-money/bevy-trait-query", branch = "bevy-0.14", optional = true }
 common = { git = "https://github.com/empathic-ai/common.git", default-features = false }
 base64 = "0.21.5"
 serde = { version = "1.0.149", features = ["derive"] }
@@ -83,12 +83,12 @@ hf-hub = { git = "https://github.com/huggingface/hf-hub.git", default-features =
 cpal = { version = "0.15.3", features = ["wasm-bindgen"] }
 
 [dependencies.bevy]
-version = "=0.13.0"
+version = "=0.14.0"
 default-features = false
 optional = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.bevy]
-version = "=0.13.0"
+version = "=0.14.0"
 features = ["dynamic_linking"]
 
 [build-dependencies]

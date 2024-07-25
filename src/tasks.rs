@@ -285,6 +285,10 @@ impl Reflect for Dynamic {
     fn clone_value(&self) -> Box<dyn Reflect> {
         self.value.clone_value()
     }
+    
+    fn try_apply(&mut self, value: &dyn Reflect) -> std::result::Result<(), bevy::reflect::ApplyError> {
+        self.value.try_apply(value)
+    }
 }
 
 impl FromReflect for Dynamic {

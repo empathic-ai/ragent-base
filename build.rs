@@ -7,9 +7,9 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut config = prost_build::Config::new();
     config.extern_path(".ragent.Thing", "::bevy_builder::prelude::Thing");
 
-    builder = builder.type_attribute(".ragent.UserEvent", "#[derive(bevy::prelude::Event)]");
+    //builder = builder.type_attribute(".ragent.UserEvent", "#[derive(bevy::prelude::Event)]");
 
-    builder.type_attribute(".", "#[derive(bevy::prelude::Reflect, bevy::prelude::Component, ragent_derive::Task, documented::Documented, serde::Serialize, serde::Deserialize)]").compile_with_config(config, &["proto/ragent.proto"], &["proto"])?;
+    builder.type_attribute(".", "#[derive(bevy::prelude::Reflect, bevy::prelude::Event, ragent_derive::Task, documented::Documented, serde::Serialize, serde::Deserialize)]").compile_with_config(config, &["proto/ragent.proto"], &["proto"])?;
 
     Ok(())
 }
