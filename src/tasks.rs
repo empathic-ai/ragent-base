@@ -148,13 +148,11 @@ fn camel_to_snake(s: &str) -> String {
     result
 }
 
-/*
 #[derive(Task, Default, Event, Reflect, Debug, Clone, Serialize, Deserialize, Documented)]
 /// Speaks text using the provided voice name and emotion
 pub struct SpeakEventArgs {
     pub text: String
 }
- */
 
 #[derive(Task, Default, Event, Reflect, Debug, Clone, Serialize, Deserialize, Documented)]
 /// Speaks text using the provided voice name and emotion
@@ -221,14 +219,14 @@ pub const SPEAK_RESPONSE: &str = "speak_response";
 pub const IMAGE_REQUEST: &str = "image";
 pub const IMAGE_RESPONSE: &str = "image_response";
 pub const TEXT_ARG: &str = "text";
-*/
+
 
 #[derive(Task, Default, Event, Reflect, Debug, Clone, Serialize, Deserialize, Documented)]
 /// Plays music in the provided genre. Use this action to play any music.
 pub struct MusicEventArgs {
     pub genre: String
 }
-
+*/
 #[derive(Debug, TypePath)]
 pub struct Dynamic {
     pub value: Box<dyn Reflect>,

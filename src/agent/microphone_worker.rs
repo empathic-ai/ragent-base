@@ -120,13 +120,16 @@ impl MicrophoneWorker {
 							let data = empathic_audio::resample_pcm(data.to_vec(), sample_rate, 16000, channels as u32, 2, 16, 16).unwrap();
 							send_input_data(_user_id.clone(), _space_id.clone(), &data, &tx);
 
-							chunks.extend_from_slice(&data.clone());
-							let duration = empathic_audio::get_duration(chunks.len(), 2, 16000, 16);
-							if duration > 5.0 {
-								println!("Output test.wav");
-								let bytes = empathic_audio::samples_to_wav(2, 16000, 16, chunks.clone());
-								futures::executor::block_on(common::utils::set_bytes("test.wav", bytes.clone()));
-								chunks.clear();
+							#[cfg(feature = "wasm32")]
+							{
+								chunks.extend_from_slice(&data.clone());
+								let duration = empathic_audio::get_duration(chunks.len(), 2, 16000, 16);
+								if duration > 5.0 {
+									println!("Output test.wav");
+									let bytes = empathic_audio::samples_to_wav(2, 16000, 16, chunks.clone());
+									futures::executor::block_on(common::utils::set_bytes("test.wav", bytes.clone()));
+									chunks.clear();
+								}
 							}
 						},
 						err_fn,

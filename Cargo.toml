@@ -9,8 +9,7 @@ description = "A framework for building LLM agents."
 crate-type = ["rlib"] #"staticlib", "cdylib", 
 
 [features]
-default = ["bevy"]
-# ["bevy", "candle"]
+default = ["bevy", "candle"]
 server = []
 # TODO: Finish non-bevy implementation (or make bevy non-optional)
 bevy = ["dep:bevy", "ragent_core/bevy", "common/bevy", "bevy_builder", "bevy-trait-query"]
@@ -24,7 +23,6 @@ ragent_derive = { git = "https://github.com/empathic-ai/ragent-derive.git" }
 empathic_audio = { git = "https://github.com/empathic-ai/empathic-audio.git" }
 bevy-trait-query = { git = "https://github.com/RobWalt/bevy-trait-query.git", optional = true }
 common = { git = "https://github.com/empathic-ai/common.git", default-features = false }
-bevy = { version = "=0.13.0", default-features = false, optional = true, features = ["dynamic_linking"] }
 base64 = "0.21.5"
 serde = { version = "1.0.149", features = ["derive"] }
 serde_json = "1.0.120"
@@ -65,7 +63,6 @@ tokenizers = { version = "0.19.1", default-features = false, features = ["unstab
 # Removed feature due to web compatibility issues: "jpeg"
 image = { version = "0.25.0", default-features = false, features = ["png"] }
 dyn-clone = "1.0.17"
-cpal = "0.15.3"
 # my-workspace-hack = { version = "0.1", path = "../../../my-workspace-hack" }
 
 [target.'cfg(not(target_arch = "xtensa"))'.dependencies]
@@ -76,12 +73,23 @@ openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git", branc
 deepgram = { git = "https://github.com/empathic-ai/deepgram-rust-sdk.git" }
 anthropic = { git = "https://github.com/Philipp-M/anthropic-rs.git", branch = "messages-api", default-features = false, optional = true }
 
-[target.'cfg(all(not(target_arch = "wasm32")))'.dependencies]
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git", branch = "streaming", optional = true }
 hf-hub = { git = "https://github.com/huggingface/hf-hub.git", features = ["tokio"], optional = true }
+cpal = { version = "0.15.3" }
 
-[target.'cfg(all(target_arch = "wasm32"))'.dependencies]
+[target.'cfg(target_arch = "wasm32")'.dependencies]
 hf-hub = { git = "https://github.com/huggingface/hf-hub.git", default-features = false, optional = true }
+cpal = { version = "0.15.3", features = ["wasm-bindgen"] }
+
+[dependencies.bevy]
+version = "=0.13.0"
+default-features = false
+optional = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies.bevy]
+version = "=0.13.0"
+features = ["dynamic_linking"]
 
 [build-dependencies]
 tonic-build = { version = "0.10.2", default-features = false, features = ["prost"] }
