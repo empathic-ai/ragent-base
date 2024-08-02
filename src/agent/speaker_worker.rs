@@ -1,3 +1,4 @@
+//use std::f128::consts::E;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -9,20 +10,33 @@ use bevy_builder::database::Thing;
 use cpal::traits::DeviceTrait;
 use cpal::traits::HostTrait;
 use cpal::traits::StreamTrait;
+use cpal::BufferSize;
 use cpal::FromSample;
 use cpal::Sample;
 use cpal::SampleFormat;
-use tokio::sync::broadcast::{Sender, Receiver};
+use cpal::SupportedBufferSize;
+use observer::Observer;
+use ringbuf::storage::Heap;
+use ringbuf::wrap::caching::Caching;
+//use tokio::sync::broadcast::{Sender, Receiver};
 use bevy::prelude::*;
 use anyhow::Result;
 use anyhow::anyhow;
 use cpal::StreamConfig;
+use ringbuf::{traits::*, HeapRb};
+use ringbuf::SharedRb;
+use tokio::sync::mpsc::Receiver;
+use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc::UnboundedSender;
 
 use super::audio_buffer::AudioBuffer;
 
 #[cfg_attr(feature = "bevy", derive(Component))]
 pub struct SpeakerWorker {
 	pub space_id: Thing,
+	//pub buffer: Caching<Arc<SharedRb<Heap<f32>>>, true, false>,
+	pub sample_rate: u32,
     pub input_tx: Sender<UserEvent>,
 }
 
@@ -39,9 +53,19 @@ impl SpeakerWorker {
 
 		let config = device.default_output_config().unwrap();
 		let sample_format = config.sample_format();
-		let bits_per_sample = sample_format.sample_size() * 8;
+		let sample_size = sample_format.sample_size();
+		let bits_per_sample = sample_size * 8;
 
-		let config = config.config();
+		if let SupportedBufferSize::Range { min, max } = config.buffer_size() {
+			println!("Speaker min frames: {} Speaker max frames {}", min, max);
+		}
+
+		let mut config = config.config();
+		config.buffer_size = BufferSize::Fixed(10);
+
+		let latency_frames = (150.0 / 1_000.0) * config.sample_rate.0 as f32;
+		let latency_samples = latency_frames as usize * config.channels as usize;
+	
 		/*
 		let format = supported_configs.find(|f| f.sample_format() == SampleFormat::I16).expect("No suitable format found");
 		let config = StreamConfig {
@@ -59,7 +83,10 @@ impl SpeakerWorker {
 		println!("Speaker sample format: {}", sample_format);
 		//println!("Sample size: {}", sample_size);
 
-		let (tx, mut rx) = tokio::sync::broadcast::channel::<UserEvent>(32);
+		let (tx, mut rx) = tokio::sync::mpsc::channel::<UserEvent>(32);
+		//let mut buffer = Arc::new(Mutex::new(AudioBuffer::new(channels)));
+
+		//let _buffer = buffer.clone();
 
 		std::thread::spawn(move || {
 			let err_fn = |err| eprintln!("an error occurred on stream: {}", err);
@@ -72,10 +99,12 @@ impl SpeakerWorker {
 					device.build_output_stream(
 						&config,
 						move |output: &mut [u8], _: &cpal::OutputCallbackInfo| {
+							/*
 							if let Some(data) = try_recv_data(&mut rx) {
 								let data = empathic_audio::resample_pcm(data.to_vec(), 16000, sample_rate, 2, 2, 16, 16).unwrap();
 								write_data(output, 2, data);
 							}
+							 */
 						},
 						err_fn,
 						None,
@@ -104,29 +133,64 @@ impl SpeakerWorker {
 					todo!()
 				},
 				cpal::SampleFormat::F32 => {
-						
-					let mut buffer = Arc::new(Mutex::new(AudioBuffer::new(channels)));
 
-					let _buffer = buffer.clone();
+					let rb = HeapRb::<f32>::new(latency_samples * 2);
+					let (mut prod, mut cons) = rb.split();
+
+					for _ in 0..latency_samples {
+						// The ring buffer has twice as much space as necessary to add latency here,
+						// so this should never fail
+						prod.try_push(0.0).unwrap();
+					}
+
 					std::thread::spawn(move || {
 						loop {
 							if let Some(data) = try_recv_data(&mut rx) {
 								
-								//println!("Writing data to speaker");
-								let data = empathic_audio::resample_pcm(data.to_vec(), 16000, sample_rate, 2, 2, 32, 32).unwrap();
-								let data = empathic_audio::convert_u8_to_f32(&data, 2, 32).unwrap();
-						
-								_buffer.lock().unwrap().write_data(data);
-		//let data = empathic_audio::combine_channels(data);
+								let data = empathic_audio::resample_pcm(data.to_vec(), 16000, sample_rate, 2, 2, 16, 16).unwrap();
+								let data = empathic_audio::convert_u8_to_f32(&data, 2, 16).unwrap();
+			
+								prod.push_iter(data.into_iter());
+
+								/*
+								for e in data {
+									if !prod.try_push(e).is_ok() {
+										println!("Failed to push! Skipping.");
+										break;
+									}
+								}
+								 */
+								
+								//_buffer.lock().unwrap().write_data(data);
+								//let data = empathic_audio::combine_channels(data);
 								//write_data(output, 2, data);
 							}
+							//std::thread::sleep(std::time::Duration::from_millis(10));
 						}
 					});
 
 					device.build_output_stream(
 						&config,
 						move |output: &mut [f32], _: &cpal::OutputCallbackInfo| {
-							buffer.lock().unwrap().fill_output(output);
+
+							/*		
+							if cons.occupied_len() > sample_size*100000 {
+								println!("Removing!");
+								for i in 0..sample_size*50000 {
+									cons.try_pop();
+								}
+							} */	
+
+							for i in 0..output.len() {
+								if let Some(e) = cons.try_pop() {
+									output[i] = e;
+								} else {
+									output[i] = 0.0;
+								}
+
+								//output[i] = 
+								//_buffer.lock().unwrap().fill_output(output);
+							}
 						},
 						err_fn,
 						None,
@@ -141,13 +205,15 @@ impl SpeakerWorker {
 			stream.play().unwrap();
 
 			loop {
-				std::thread::sleep(std::time::Duration::from_millis(1000));
+				std::thread::sleep(std::time::Duration::from_millis(1));
 			}
 		});
 
 		Self {
 			space_id: space_id,
-			input_tx: tx,
+			//buffer: buffer,
+			sample_rate,
+			input_tx: tx
 		}
 	}
 }
@@ -224,7 +290,16 @@ impl UserEventWorker for SpeakerWorker {
 
 	fn send_event(&mut self, ev: UserEvent) -> anyhow::Result<()> {
 		//println!("Speaker worker got event!");
-		self.input_tx.send(ev)?;
+		self.input_tx.blocking_send(ev)?;
+		/* 
+		if let UserEvent { user_id: _, space_id: _, context_id: _, user_event_type: Some(UserEventType::SpeakBytesEvent(ev)) } = ev {
+			let data = ev.data;
+			let data = empathic_audio::resample_pcm(data.to_vec(), 16000, self.sample_rate, 2, 2, 16, 16).unwrap();
+			let data = empathic_audio::convert_u8_to_f32(&data, 2, 16).unwrap();
+
+			self.buffer.lock().unwrap().write_data(data);
+		}*/
+
 		Ok(())
 	}
 

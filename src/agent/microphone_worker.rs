@@ -7,11 +7,15 @@ use bevy_builder::database::Thing;
 use cpal::traits::DeviceTrait;
 use cpal::traits::HostTrait;
 use cpal::traits::StreamTrait;
+use cpal::BufferSize;
 use cpal::FromSample;
 use cpal::Sample;
 use cpal::SampleFormat;
 use cpal::StreamConfig;
-use tokio::sync::broadcast::{Sender, Receiver};
+use cpal::SupportedBufferSize;
+use tokio::sync::mpsc::Receiver;
+use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::{UnboundedSender, UnboundedReceiver};
 use bevy::prelude::*;
 use anyhow::Result;
 use std::sync::Arc;
@@ -38,8 +42,16 @@ impl MicrophoneWorker {
 
 		let config = device.default_input_config().unwrap();
 		let sample_format = config.sample_format();
-		let sample_rate = config.sample_rate().0;
-		let channels = config.channels();
+
+		if let SupportedBufferSize::Range { min, max } = config.buffer_size() {
+			println!("Microphone min frames: {} Microphone max frames {}", min, max);
+		}
+
+		let mut config = config.config();
+		config.buffer_size = BufferSize::Fixed(10);
+
+		let sample_rate = config.sample_rate.0;
+		let channels = config.channels;
 
 		let bits_per_sample = sample_format.sample_size() * 8;
 
@@ -57,10 +69,10 @@ impl MicrophoneWorker {
         //.default_input_config()
         //.expect("Failed to get default input config");
 	
-		let (tx, rx) = tokio::sync::broadcast::channel::<UserEvent>(32);
+		let (tx, rx) = tokio::sync::mpsc::channel::<UserEvent>(32);
 		
-		println!("Mic sample rate: {}", config.sample_rate().0);
-		println!("Mic channel count: {}", config.channels());
+		println!("Mic sample rate: {}", config.sample_rate.0);
+		println!("Mic channel count: {}", config.channels);
 		println!("Mic sample format: {}", sample_format);
 
 		let _space_id = space_id.clone();
@@ -117,20 +129,32 @@ impl MicrophoneWorker {
 						move |data: &[f32], _: &_| {
 							//let data = empathic_audio::separate_channels_f32(data.to_vec(), 2);
 							let data = empathic_audio::convert_f32_to_u8(data, channels as u16, 16).unwrap();
-							let data = empathic_audio::resample_pcm(data.to_vec(), sample_rate, 16000, channels as u32, 2, 16, 16).unwrap();
-							send_input_data(_user_id.clone(), _space_id.clone(), &data, &tx);
+							//let data = empathic_audio::resample_pcm(data.to_vec(), sample_rate, 16000, channels as u32, 2, 16, 16).unwrap();
+							let _user_id = _user_id.clone();
+							let _space_id = _space_id.clone();
+							let tx = tx.clone();
+							//std::thread::spawn(move || {
+								send_input_data(_user_id, _space_id, &data, &tx);
+							//});
 
-							#[cfg(feature = "wasm32")]
+							/*
+							#[cfg(not(feature = "wasm32"))]
 							{
 								chunks.extend_from_slice(&data.clone());
 								let duration = empathic_audio::get_duration(chunks.len(), 2, 16000, 16);
 								if duration > 5.0 {
+									let data = empathic_audio::resample_pcm(chunks.to_vec(), 16000, 48000, 2, 2, 16, 16).unwrap();
+									let data = empathic_audio::convert_u8_to_f32(&data, 2, 16).unwrap();
+									let data = empathic_audio::convert_f32_to_u8(&data, 2, 16).unwrap();
+
 									println!("Output test.wav");
-									let bytes = empathic_audio::samples_to_wav(2, 16000, 16, chunks.clone());
+									let bytes = empathic_audio::samples_to_wav(2, 48000, 16, data.clone());
 									futures::executor::block_on(common::utils::set_bytes("test.wav", bytes.clone()));
 									chunks.clear();
 								}
 							}
+							 */
+							
 						},
 						err_fn,
 						None,
@@ -145,7 +169,7 @@ impl MicrophoneWorker {
 			stream.play().unwrap();
 
 			loop {
-				std::thread::sleep(std::time::Duration::from_secs(3));
+				std::thread::sleep(std::time::Duration::from_millis(10));
 			}
 		});
 
@@ -159,7 +183,7 @@ impl MicrophoneWorker {
 
 fn send_input_data(user_id: Thing, space_id: Thing, input: &[u8], tx: &Sender<UserEvent>)
 {
-    tx.send(UserEvent::new(Some(user_id), space_id, crate::UserEventType::SpeakBytesEvent(SpeakBytesEvent { data: input.to_vec() }))).ok();
+    tx.blocking_send(UserEvent::new(Some(user_id), space_id, crate::UserEventType::SpeakBytesEvent(SpeakBytesEvent { data: input.to_vec() })));//.ok();
 }
 
 impl UserEventWorker for MicrophoneWorker {

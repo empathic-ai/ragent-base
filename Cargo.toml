@@ -63,6 +63,7 @@ tokenizers = { version = "0.19.1", default-features = false, features = ["unstab
 # Removed feature due to web compatibility issues: "jpeg"
 image = { version = "0.25.0", default-features = false, features = ["png"] }
 dyn-clone = "1.0.17"
+ringbuf = "0.4.1"
 # my-workspace-hack = { version = "0.1", path = "../../../my-workspace-hack" }
 
 [target.'cfg(not(target_arch = "xtensa"))'.dependencies]
