@@ -546,8 +546,11 @@ impl AgentWorker {
 
 
         #[cfg(not(feature="server"))]
+        #[cfg(not(target_arch="wasm32"))]
         let chat_completer = ChatGPTChatCompleter::new_from_env();
-        //let chat_completer = CandleChatCompleter::new();        
+        #[cfg(not(feature="server"))]
+        #[cfg(target_arch="wasm32")]
+        let chat_completer = CandleChatCompleter::new();        
         #[cfg(feature="server")]
         //let chat_completer = CandleChatCompleter::new();        
         let chat_completer = ChatGPTChatCompleter::new_from_env();
@@ -672,8 +675,11 @@ impl AgentWorker {
 
     async fn process_response(state: Arc<Mutex<AgentState>>, name: String, user_id: Thing, output_tx: tokio::sync::broadcast::Sender<UserEvent>, mut input_rx: tokio::sync::broadcast::Receiver<UserEvent>, voice_id: String, asset_cache: Arc<Mutex<AssetCache>>, voice_tx: async_channel::Sender<UserEvent>) {
         #[cfg(not(feature="server"))]
+        #[cfg(feature="game")]
         let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
-        //let synthesizer = Arc::new(CoquiSynthesizer::new());
+        #[cfg(not(feature="server"))]
+        #[cfg(not(feature="game"))]
+        let synthesizer = Arc::new(CoquiSynthesizer::new());
         #[cfg(feature="server")]
         //let synthesizer = Arc::new(AzureSynthesizer::new_from_env());
         let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
