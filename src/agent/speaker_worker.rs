@@ -35,13 +35,14 @@ use super::audio_buffer::AudioBuffer;
 #[cfg_attr(feature = "bevy", derive(Component))]
 pub struct SpeakerWorker {
 	pub space_id: Thing,
+	pub user_id: Thing,
 	//pub buffer: Caching<Arc<SharedRb<Heap<f32>>>, true, false>,
 	pub sample_rate: u32,
     pub input_tx: Sender<UserEvent>,
 }
 
 impl SpeakerWorker {
-	pub fn new(space_id: Thing) -> Self {
+	pub fn new(space_id: Thing, user_id: Thing) -> Self {
 		let host = cpal::default_host();
 		let device = host.default_output_device().unwrap();
 
@@ -134,7 +135,8 @@ impl SpeakerWorker {
 				},
 				cpal::SampleFormat::F32 => {
 
-					let rb = HeapRb::<f32>::new(latency_samples * 2);
+					// Previously 2
+					let rb = HeapRb::<f32>::new(latency_samples * 200);
 					let (mut prod, mut cons) = rb.split();
 
 					for _ in 0..latency_samples {
@@ -147,7 +149,7 @@ impl SpeakerWorker {
 						loop {
 							if let Some(data) = try_recv_data(&mut rx) {
 								
-								let data = empathic_audio::resample_pcm(data.to_vec(), 16000, sample_rate, 2, 2, 16, 16).unwrap();
+								let data = empathic_audio::resample_pcm(data.to_vec(), 16000, sample_rate, 1, 2, 16, 16).unwrap();
 								let data = empathic_audio::convert_u8_to_f32(&data, 2, 16).unwrap();
 			
 								prod.push_iter(data.into_iter());
@@ -211,6 +213,7 @@ impl SpeakerWorker {
 
 		Self {
 			space_id: space_id,
+			user_id: user_id,
 			//buffer: buffer,
 			sample_rate,
 			input_tx: tx
@@ -289,8 +292,11 @@ impl UserEventWorker for SpeakerWorker {
 	}
 
 	fn send_event(&mut self, ev: UserEvent) -> anyhow::Result<()> {
-		//println!("Speaker worker got event!");
-		self.input_tx.blocking_send(ev)?;
+		if self.user_id != *ev.user_id.as_ref().unwrap() {
+			//println!("Speaker worker got event!");
+			self.input_tx.blocking_send(ev)?;
+		}
+
 		/* 
 		if let UserEvent { user_id: _, space_id: _, context_id: _, user_event_type: Some(UserEventType::SpeakBytesEvent(ev)) } = ev {
 			let data = ev.data;

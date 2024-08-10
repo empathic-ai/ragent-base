@@ -23,7 +23,7 @@ pub struct VoiceStreamRequest {
     pub model_id: String,
     // For information on ElevenLabs concurrent requests limit, see: https://help.elevenlabs.io/hc/en-us/articles/14312733311761-How-many-requests-can-I-make-and-can-I-increase-it-
     // Currently defaults to 5 (Creator tier)
-    pub optimize_streaming_latency: u32
+    //pub optimize_streaming_latency: u32
 }
 
 impl ElevenLabsSynthesizer {
@@ -31,7 +31,7 @@ impl ElevenLabsSynthesizer {
     // mp3_44100_128
     // for esp32 -- format = pcm_24000
     pub fn new_from_env() -> Self {
-        Self { api_key: env::var("ELEVEN_LABS_KEY").unwrap(), format: "pcm_24000".to_string(), semaphore: Semaphore::new(5) }
+        Self { api_key: env::var("ELEVEN_LABS_KEY").unwrap(), format: "pcm_16000".to_string(), semaphore: Semaphore::new(5) }
     }
 }
 
@@ -71,7 +71,7 @@ impl Synthesizer for ElevenLabsSynthesizer {
             .post(
                 format!("https://api.elevenlabs.io/v1/text-to-speech/{}/stream?output_format={}", voice_id, self.format)
             )
-            .json(&VoiceStreamRequest { text: text.clone(), model_id: "eleven_turbo_v2".to_string(), optimize_streaming_latency: 1 })
+            .json(&VoiceStreamRequest { text: text.clone(), model_id: "eleven_turbo_v2".to_string() })
             //.json(&format!("{{\"voicemodel_uuid\": \"{voice_uuid}\", \"pace\": {pace}, \"speech\": \"{speech}\"}}"))
             //.header("Authorization", format!("Bearer {}", self.access_token))
             .headers(headers)
