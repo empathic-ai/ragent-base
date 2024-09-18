@@ -31,7 +31,7 @@ impl ElevenLabsSynthesizer {
     // mp3_44100_128
     // for esp32 -- format = pcm_24000
     pub fn new_from_env() -> Self {
-        Self { api_key: env::var("ELEVEN_LABS_KEY").unwrap(), format: "pcm_16000".to_string(), semaphore: Semaphore::new(5) }
+        Self { api_key: env::var("ELEVEN_LABS_KEY").unwrap(), format: "pcm_24000".to_string(), semaphore: Semaphore::new(5) }
     }
 }
 
