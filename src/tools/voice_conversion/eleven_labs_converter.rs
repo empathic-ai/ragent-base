@@ -17,6 +17,14 @@ pub struct ElevenLabsConverter {
     semaphore: Semaphore
 }
 
+#[derive(Serialize, Debug)]
+pub struct VoiceSettings {
+    pub stability: f32,
+    pub similarity_boost: f32,
+    pub style: f32,
+    pub use_speaker_boost: bool
+}
+
 /*
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VoiceConvertRequest {
@@ -44,8 +52,8 @@ impl VoiceConverter for ElevenLabsConverter {
         let api_key = self.api_key.clone();
 
         let mut headers = HeaderMap::new();
-        headers.insert("accept", "application/json".parse().unwrap());
-        headers.insert("content-type", "application/json".parse().unwrap());
+        //headers.insert("accept", "*/*".parse().unwrap());
+        //headers.insert("content-type", "multipart/form-data".parse().unwrap());
         headers.insert(
             "xi-api-key",
             api_key.parse().unwrap(),
@@ -54,8 +62,11 @@ impl VoiceConverter for ElevenLabsConverter {
         let audio = base64::encode(bytes.clone());
 
         let form = multipart::Form::new()
-            .part("audio", multipart::Part::bytes(bytes))
-            .part("model_id", multipart::Part::text("eleven_english_sts_v2"));
+            .part("audio", multipart::Part::bytes(bytes).file_name("test.wav").mime_str("audio/wav").unwrap())
+            .part("model_id", multipart::Part::text("eleven_multilingual_sts_v2"));
+            //.part("voice_settings", multipart::Part::text(VoiceSettings {
+
+            //}));
 
         let response = client
             .post(
@@ -67,7 +78,7 @@ impl VoiceConverter for ElevenLabsConverter {
             .headers(headers)
             .send()
             .await?;
-
+        
         let bytes = response.bytes().await?;
 
         Ok(VoiceConversionResult { bytes: bytes.to_vec() })

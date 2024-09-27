@@ -7,6 +7,7 @@ use crate::UserEventType;
 use super::UserEventWorker;
 use super::UserEvent;
 use bevy_builder::database::Thing;
+use bytes::Bytes;
 use cpal::traits::DeviceTrait;
 use cpal::traits::HostTrait;
 use cpal::traits::StreamTrait;
@@ -38,13 +39,26 @@ pub struct SpeakerWorker {
 	pub user_id: Thing,
 	//pub buffer: Caching<Arc<SharedRb<Heap<f32>>>, true, false>,
 	pub sample_rate: u32,
-    pub input_tx: Sender<UserEvent>,
+    pub input_tx: Sender<Bytes>,
 }
 
 impl SpeakerWorker {
-	pub fn new(space_id: Thing, user_id: Thing) -> Self {
+	pub fn new(device_name: Option<String>, space_id: Thing, user_id: Thing) -> Self {
 		let host = cpal::default_host();
-		let device = host.default_output_device().unwrap();
+
+		let device = {
+			if let Some(device_name) = device_name {
+				for device in host.output_devices().unwrap().into_iter() {
+					println!("Speaker device: {}", device.name().unwrap());
+				}
+				let device = host.output_devices().unwrap().find(|x| x.name().unwrap() == device_name).unwrap();
+				device
+			} else {
+				host.default_output_device().unwrap()
+			}
+		};
+
+		//let device = host.default_output_device().unwrap();
 
 		// Get supported output formats
 		//let mut supported_configs = device.supported_input_configs()
@@ -84,11 +98,12 @@ impl SpeakerWorker {
 		println!("Speaker sample format: {}", sample_format);
 		//println!("Sample size: {}", sample_size);
 
-		let (tx, mut rx) = tokio::sync::mpsc::channel::<UserEvent>(32);
+		let (tx, mut rx) = tokio::sync::mpsc::channel::<Bytes>(256);
 		//let mut buffer = Arc::new(Mutex::new(AudioBuffer::new(channels)));
 
 		//let _buffer = buffer.clone();
 
+		let _user_id = user_id.clone();
 		std::thread::spawn(move || {
 			let err_fn = |err| eprintln!("an error occurred on stream: {}", err);
 
@@ -136,7 +151,7 @@ impl SpeakerWorker {
 				cpal::SampleFormat::F32 => {
 
 					// Previously 2
-					let rb = HeapRb::<f32>::new(latency_samples * 200);
+					let rb = HeapRb::<f32>::new(latency_samples * 300);
 					let (mut prod, mut cons) = rb.split();
 
 					for _ in 0..latency_samples {
@@ -147,12 +162,12 @@ impl SpeakerWorker {
 
 					std::thread::spawn(move || {
 						loop {
-							if let Some(data) = try_recv_data(&mut rx) {
+							if let Some(data) = try_recv_data(_user_id.clone(), &mut rx) {
 								
-								let data = empathic_audio::resample_pcm(data.to_vec(), 16000, sample_rate, 1, 2, 16, 16).unwrap();
+								let data = empathic_audio::resample_pcm(data.to_vec(), 24000, sample_rate, 1, 2, 16, 16).unwrap();
 								let data = empathic_audio::convert_u8_to_f32(&data, 2, 16).unwrap();
 			
-								prod.push_iter(data.into_iter());
+								prod.push_slice(&data);
 
 								/*
 								for e in data {
@@ -221,9 +236,13 @@ impl SpeakerWorker {
 	}
 }
 
-fn try_recv_data(rx: &mut Receiver<UserEvent>) -> Option<Vec<u8>> {
-	if let Ok(UserEvent { user_id: _, space_id: _, context_id: _, user_event_type: Some(UserEventType::SpeakBytesEvent(ev)) }) = rx.try_recv() {
-		Some(ev.data)
+fn try_recv_data(user_id: Thing, rx: &mut Receiver<Bytes>) -> Option<Vec<u8>> {
+	if let Ok(data) = rx.try_recv() {
+		//if ev_user_id == user_id {
+			Some(data.to_vec())
+		//} else {
+		//	None
+		//}
 	} else {
 		None
 	}
@@ -294,7 +313,15 @@ impl UserEventWorker for SpeakerWorker {
 	fn send_event(&mut self, ev: UserEvent) -> anyhow::Result<()> {
 		if self.user_id != *ev.user_id.as_ref().unwrap() {
 			//println!("Speaker worker got event!");
-			self.input_tx.blocking_send(ev)?;
+
+			if ev.user_id.unwrap() == self.user_id {
+				if let UserEvent { user_id: _, space_id: _, context_id: _, user_event_type: Some(UserEventType::SpeakBytesEvent(ev)) } = ev {
+					let data = ev.data;
+					self.input_tx.blocking_send(Bytes::from(data))?;
+				}
+
+			}
+
 		}
 
 		/* 

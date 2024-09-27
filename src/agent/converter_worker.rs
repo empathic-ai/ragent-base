@@ -1,9 +1,17 @@
+use super::microphone_worker;
+use super::speaker_worker;
+use super::MicrophoneWorker;
+use super::SpeakerWorker;
 use super::UserEventWorker;
 use super::UserEvent;
+use super::VoiceConverter;
 use bevy_builder::database::Thing;
-use tokio::sync::broadcast::{Sender, Receiver};
+use bytes::Bytes;
+use tokio::sync::mpsc::Receiver;
+use tokio::sync::mpsc::Sender;
 use bevy::prelude::*;
 use anyhow::Result;
+use tokio::task::JoinHandle;
 
 #[cfg_attr(feature = "bevy", derive(Component))]
 pub struct ConverterWorker {
@@ -12,17 +20,51 @@ pub struct ConverterWorker {
     pub output_rx: Receiver<UserEvent>,
     pub input_tx: Sender<UserEvent>,
     pub input_rx: Receiver<UserEvent>,
+	pub handle: JoinHandle<()>
 }
 
 impl ConverterWorker {
-	pub fn new(space_id: Thing) -> Self {
+	pub async fn new(space_id: Thing, user_id: Thing) -> Self {
 
+		let mut microphone_worker = MicrophoneWorker::new(space_id.clone(), user_id.clone());
+		let mut default_speaker_worker = SpeakerWorker::new(None, space_id.clone(), user_id.clone());
+		let mut loopback_speaker_worker = SpeakerWorker::new(Some("CABLE Input (VB-Audio Virtual Cable)".to_string()), space_id.clone(), user_id.clone());
+
+		/*
+		let handle = tokio::spawn(async move {
+			while let Some(data) = microphone_worker.output_rx.recv().await {
+				default_speaker_worker.input_tx.send(data).await;
+			}
+		});
+		*/
+	
+		let mut vad_rx = empathic_audio::streaming::volume_vad_filter(microphone_worker.output_rx);
+
+		let handle = tokio::spawn(async move {
+			while let Some(data) = vad_rx.recv().await {
+				let converter = super::ElevenLabsConverter::new_from_env();
+				let wav_data = empathic_audio::samples_to_wav(1, 16000, 16, data.to_vec());
+				//common::utils::set_bytes("pocket_test.wav", wav_data.clone()).await;
+				
+				let result = converter.convert_voice("vindicta".to_string(), wav_data).await.unwrap();
+				//let wav_data = empathic_audio::samples_to_wav(1, 24000, 16, result.bytes);
+				//common::utils::set_bytes("pocket_test.wav", wav_data).await;
+				let data = Bytes::from_iter(result.bytes);
+				loopback_speaker_worker.input_tx.send(data.clone()).await;
+				default_speaker_worker.input_tx.send(data).await;
+			}
+		}); 
+
+		let (tx, rx) = tokio::sync::mpsc::channel::<UserEvent>(32);
+		let (_tx, _rx) = tokio::sync::mpsc::channel::<UserEvent>(32);
+		
 		Self {
 			space_id: space_id,
-			output_tx: todo!(),
-			output_rx: todo!(),
-			input_tx: todo!(),
-			input_rx: todo!(),
+			output_tx: tx,
+			output_rx: rx,
+			input_tx: _tx,
+			input_rx: _rx,
+			handle: handle
 		}
 	}
 }
@@ -33,11 +75,13 @@ impl UserEventWorker for ConverterWorker {
 	}
 
 	fn send_event(&mut self, ev: UserEvent) -> anyhow::Result<()> {
-		todo!()
+		//todo!()
+		Ok(())
 	}
 
 	fn try_recv_event(&mut self) -> anyhow::Result<UserEvent> {
-		todo!()
+        let ev = self.output_rx.try_recv()?;
+        Ok(ev)
 	}
 }
 
