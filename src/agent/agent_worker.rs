@@ -49,8 +49,11 @@ impl TranscriberWorker {
     pub async fn new(space_id: Thing, user_id: Option<Thing>, output_tx: tokio::sync::broadcast::Sender<UserEvent>) -> Self {
         #[cfg(not(feature="server"))]
         #[cfg(not(target_arch="wasm32"))]
+        #[cfg(not(target_os="android"))]
         let mut transcriber = DeepgramTranscriber::new_from_env();
-        //let mut transcriber = whisper_transcriber::WhisperTranscriber::new();
+        #[cfg(not(feature="server"))]
+        #[cfg(target_os="android")]
+        let mut transcriber = whisper_transcriber::WhisperTranscriber::new();
         #[cfg(not(feature="server"))]
         #[cfg(target_arch="wasm32")]
         let mut transcriber = web_speech_transcriber::WebSpeechTranscriber::new();
@@ -547,9 +550,10 @@ impl AgentWorker {
 
         #[cfg(not(feature="server"))]
         #[cfg(not(target_arch="wasm32"))]
+        #[cfg(not(target_os="android"))]
         let chat_completer = ChatGPTChatCompleter::new_from_env();
         #[cfg(not(feature="server"))]
-        #[cfg(target_arch="wasm32")]
+        #[cfg(any(target_arch="wasm32", target_os="android"))]
         let chat_completer = CandleChatCompleter::new();        
         #[cfg(feature="server")]
         //let chat_completer = CandleChatCompleter::new();        

@@ -5,13 +5,14 @@ edition = "2021"
 license = "MIT"
 description = "A framework for building LLM agents."
 
-[lib]
-crate-type = ["rlib"] #"staticlib", "cdylib", 
+# [lib]
+# crate-type = ["rlib"] #"staticlib", "cdylib", 
 
 [features]
 default = ["bevy", "candle"]
 server = []
 # TODO: Finish non-bevy implementation (or make bevy non-optional)
+# bevy = ["dep:bevy", "ragent_core/bevy", "bevy-trait-query"]
 bevy = ["dep:bevy", "ragent_core/bevy", "common/bevy", "bevy_builder", "bevy-trait-query"]
 candle = ["candle-core", "candle-nn", "candle-transformers", "hf-hub", "symphonia", "async-stream", "tokenizers"]
 anthropic = ["dep:anthropic"]
@@ -21,7 +22,7 @@ bevy_builder = { git = "https://github.com/empathic-ai/bevy-builder.git", option
 ragent_core = { git = "https://github.com/empathic-ai/ragent-core.git", default-features = false }
 ragent_derive = { git = "https://github.com/empathic-ai/ragent-derive.git" }
 empathic_audio = { git = "https://github.com/empathic-ai/empathic-audio.git" }
-bevy-trait-query = { git = "https://github.com/dead-money/bevy-trait-query", branch = "bevy-0.14", optional = true }
+bevy-trait-query = { git = "https://github.com/dead-money/bevy-trait-query.git", branch = "bevy-0.14", optional = true }
 common = { git = "https://github.com/empathic-ai/common.git", default-features = false }
 base64 = "0.21.5"
 serde = { version = "1.0.149", features = ["derive"] }
@@ -72,7 +73,7 @@ reqwest = { version = "0.12.4", features = ["json", "stream", "multipart"] }
 [target.'cfg(all(not(target_arch = "xtensa"), not(target_arch = "wasm32"), not(target_os = "android")))'.dependencies]
 openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git", branch = "streaming" }
 deepgram = { git = "https://github.com/empathic-ai/deepgram-rust-sdk.git" }
-anthropic = { git = "https://github.com/Philipp-M/anthropic-rs.git", branch = "messages-api", default-features = false, optional = true }
+anthropic = { git = "https://github.com/AbdelStark/anthropic-rs.git", default-features = false, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git", branch = "streaming", optional = true }
