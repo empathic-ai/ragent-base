@@ -3,7 +3,7 @@ use tokio::sync::Semaphore;
 use std::{error::Error, collections::HashMap, env};
 use super::*;
 use lazy_static::lazy_static;
-use openai_api_rs::v1::{*, api::Client, image::ImageGenerationRequest, audio::AudioSpeechRequest};
+use openai_api_rs::v1::{*, api::OpenAIClient, image::ImageGenerationRequest, audio::AudioSpeechRequest};
 use futures_util::{Stream, FutureExt, StreamExt, stream, TryStreamExt};
 use async_trait::async_trait;
 
@@ -35,8 +35,8 @@ impl OpenAISynthesizer {
 impl Synthesizer for OpenAISynthesizer {
     async fn create_speech(&self, emotion: String, voice_name: String, text: String) -> Result<SynthesisResult> {
         let voice_name = VOICE_NAME_BY_NAME.get(&voice_name).unwrap();
-        let client = Client::new(env::var("OPENAI_API_KEY").unwrap().to_string());
-        let bytes = client.create_speech(AudioSpeechRequest::new("tts-1-hd".to_string(), voice_name.to_owned(), text, "".to_string()))?;
+        let client = OpenAIClient::new(env::var("OPENAI_API_KEY").unwrap().to_string());
+        let bytes = client.create_speech(AudioSpeechRequest::new("tts-1-hd".to_string(), voice_name.to_owned(), text, "".to_string())).await?;
         Ok(SynthesisResult { bytes: bytes.to_vec() })
     }
 }

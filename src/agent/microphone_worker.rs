@@ -32,7 +32,7 @@ pub struct MicrophoneWorker {
 }
 
 impl MicrophoneWorker {
-	pub fn new(space_id: Thing, user_id: Thing) -> Self {
+	pub fn new(space_id: Thing, user_id: Thing, device_name: Option<String>) -> Self {
 		
 		println!("Creating microphone worker...");
 
@@ -40,7 +40,11 @@ impl MicrophoneWorker {
 		//for device in host.input_devices().unwrap().into_iter() {
 		//	println!("Microphone device: {}", device.name().unwrap());
 		//}
-		let device = host.input_devices().unwrap().find(|x| x.name().unwrap() == "Microphone (WO Mic Device)").unwrap();
+		let device = if let Some(device_name) = device_name {
+			host.input_devices().unwrap().find(|x| x.name().unwrap() == device_name).unwrap()
+		} else {
+			host.default_input_device().unwrap()
+		};
 
 		//let device = host.default_input_device().unwrap();
 
@@ -57,7 +61,7 @@ impl MicrophoneWorker {
 		}
 
 		let mut config = config.config();
-		config.buffer_size = BufferSize::Fixed(10);
+		config.buffer_size = BufferSize::Fixed(1);
 
 		let sample_rate = config.sample_rate.0;
 		let channels = config.channels;
@@ -78,7 +82,7 @@ impl MicrophoneWorker {
         //.default_input_config()
         //.expect("Failed to get default input config");
 	
-		let (tx, rx) = tokio::sync::mpsc::channel::<Bytes>(256);
+		let (tx, rx) = tokio::sync::mpsc::channel::<Bytes>(16);
 		
 		println!("Mic sample rate: {}", config.sample_rate.0);
 		println!("Mic channel count: {}", config.channels);
@@ -87,7 +91,7 @@ impl MicrophoneWorker {
 		let latency_frames = (150.0 / 1_000.0) * config.sample_rate.0 as f32;
 		let latency_samples = latency_frames as usize * config.channels as usize;
 		
-		let rb = HeapRb::<f32>::new(latency_samples * 2000);
+		let rb = HeapRb::<f32>::new(latency_samples * 100);
 		let (mut prod, mut cons) = rb.split();
 
 		let _space_id = space_id.clone();
@@ -95,18 +99,18 @@ impl MicrophoneWorker {
 
 		std::thread::spawn(move || {
 			loop {
-				let mut processing_buffer = vec![0f32; latency_samples*2000];
+				let mut processing_buffer = vec![0f32; latency_samples*100];
 				let count = cons.pop_slice(&mut processing_buffer);
 				if count > 0 {
-					println!("Count: {}", count);
 					let data = &processing_buffer[..count];
 					// Perform resampling and format conversion
 					let data = empathic_audio::convert_f32_to_u8(data, 16).unwrap();
 					let data = empathic_audio::resample_pcm(data.to_vec(), sample_rate, 16000, channels as u32, 1, 16, 16).unwrap();
-					tx.blocking_send(Bytes::from_iter(data.to_vec()));
+
+					tx.blocking_send(Bytes::from_iter(data.to_vec())).unwrap();
 				}
 				// Optional: Add sleep to prevent tight loop
-				std::thread::sleep(std::time::Duration::from_millis(200));
+				std::thread::sleep(std::time::Duration::from_millis(500));
 			}
 
 			//let _user_id = _user_id.clone();

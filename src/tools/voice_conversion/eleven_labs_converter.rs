@@ -37,7 +37,8 @@ pub struct VoiceConvertRequest {
 
 impl ElevenLabsConverter {
     pub fn new_from_env() -> Self {
-        Self { api_key: env::var("ELEVEN_LABS_KEY").unwrap(), format: "pcm_24000".to_string(), semaphore: Semaphore::new(5) }
+        // pcm: pcm_24000
+        Self { api_key: env::var("ELEVEN_LABS_KEY").unwrap(), format: "pcm_16000".to_string(), semaphore: Semaphore::new(5) }
     }
 }
 

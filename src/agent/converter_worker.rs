@@ -26,9 +26,9 @@ pub struct ConverterWorker {
 impl ConverterWorker {
 	pub async fn new(space_id: Thing, user_id: Thing) -> Self {
 
-		let mut microphone_worker = MicrophoneWorker::new(space_id.clone(), user_id.clone());
-		let mut default_speaker_worker = SpeakerWorker::new(None, space_id.clone(), user_id.clone());
-		let mut loopback_speaker_worker = SpeakerWorker::new(Some("CABLE Input (VB-Audio Virtual Cable)".to_string()), space_id.clone(), user_id.clone());
+		let mut microphone_worker = MicrophoneWorker::new(space_id.clone(), user_id.clone(), Some("Microphone (WO Mic Device)".to_string()));
+		let mut default_speaker_worker = SpeakerWorker::new(space_id.clone(), user_id.clone(), None);
+		let mut loopback_speaker_worker = SpeakerWorker::new(space_id.clone(), user_id.clone(), Some("CABLE Input (VB-Audio Virtual Cable)".to_string()));
 
 		/*
 		let handle = tokio::spawn(async move {

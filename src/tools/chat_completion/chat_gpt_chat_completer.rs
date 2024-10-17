@@ -1,7 +1,7 @@
 use async_channel::{Sender, Receiver};
 use bytes::Bytes;
 use futures_util::lock::Mutex;
-use openai_api_rs::v1::api::Client;
+use openai_api_rs::v1::api::OpenAIClient;
 use openai_api_rs::v1::chat_completion::*;
 
 use async_trait::async_trait;
@@ -57,6 +57,8 @@ impl ChatCompleter for ChatGPTChatCompleter {
                     ),
                 },
                 name: message.name,
+                tool_calls: None,
+                tool_call_id: None
             }
         }).collect();
 
@@ -73,6 +75,8 @@ impl ChatCompleter for ChatGPTChatCompleter {
                 role:  openai_api_rs::v1::chat_completion::MessageRole::system,
                 content: openai_api_rs::v1::chat_completion::Content::Text(function_prompt),
                 name: None,
+                tool_calls: None,
+                tool_call_id: None
             });
         };
 
@@ -107,7 +111,7 @@ impl ChatCompleter for ChatGPTChatCompleter {
 
         let chat_completion_request: ChatCompletionRequest = ChatCompletionRequest::new(model_name.clone(), messages).stream(true);
        
-        let client = Client::new(self.api_key.clone());
+        let client = OpenAIClient::new(self.api_key.clone());
         let mut stream = client.chat_completion_stream(chat_completion_request.clone()).await.expect("Failed to get chat completion stream.");
         
         let stream = stream.map(|x| {

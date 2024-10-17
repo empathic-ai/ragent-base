@@ -35,7 +35,7 @@ tokio = { version = "1.32.0", default-features = false, features = ["macros", "r
 anyhow = "1.0.71"
 bytes = "1.5.0"
 futures = "0.3.25"
-futures-util = "0.3.25"
+futures-util = "0.3.31"
 nameof = "1.2.2"
 documented = "0.1.2"
 lazy_static = "1.4.0"
@@ -64,18 +64,19 @@ tokenizers = { version = "0.19.1", default-features = false, features = ["unstab
 image = { version = "0.25.0", default-features = false, features = ["png"] }
 dyn-clone = "1.0.17"
 ringbuf = "0.4.1"
+tokio-tungstenite = "0.24.0"
 # my-workspace-hack = { version = "0.1", path = "../../../my-workspace-hack" }
 
 [target.'cfg(not(target_arch = "xtensa"))'.dependencies]
 reqwest = { version = "0.12.4", features = ["json", "stream", "multipart"] }
 
 [target.'cfg(all(not(target_arch = "xtensa"), not(target_arch = "wasm32"), not(target_os = "android")))'.dependencies]
-openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git", branch = "streaming" }
+openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git" }
 deepgram = { git = "https://github.com/empathic-ai/deepgram-rust-sdk.git" }
 anthropic = { git = "https://github.com/Philipp-M/anthropic-rs.git", branch = "messages-api", default-features = false, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git", branch = "streaming", optional = true }
+openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git", optional = true }
 hf-hub = { git = "https://github.com/huggingface/hf-hub.git", features = ["tokio"], optional = true }
 cpal = { version = "0.15.3" }
 

@@ -1,5 +1,6 @@
 #![allow(warnings)]
 #![allow(unused)]
+#![feature(async_closure)]
 
 pub mod service {
     use ragent_core::prelude::*;

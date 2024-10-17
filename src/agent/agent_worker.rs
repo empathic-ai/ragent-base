@@ -4,6 +4,7 @@ use agent_worker::{coqui_synthesizer::CoquiSynthesizer};
 use bevy::utils::HashSet;
 use bytes::Bytes;
 use collections::hash_map::Entry;
+use futures_lite::StreamExt;
 use futures_util::lock::Mutex;
 
 use async_trait::async_trait;
@@ -17,7 +18,7 @@ use std::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 use futures::Stream;
-use futures_util::StreamExt;
+
 use anyhow::{Result, anyhow};
 use common::prelude::*;
 use empathic_audio::*;
@@ -126,7 +127,7 @@ impl TranscriberWorker {
 }
 
 
-struct ResponseWorker {
+struct ChatCompletionResponseWorker {
     space_id: Thing,
     user_id: Thing,
     context_id: Thing,
@@ -136,7 +137,7 @@ struct ResponseWorker {
     output_tx: tokio::sync::broadcast::Sender<UserEvent>
 }
 
-impl ResponseWorker {
+impl ChatCompletionResponseWorker {
     pub fn new(space_id: Thing, user_id: Thing, context_id: Thing, config: AgentConfig, messages: Vec<ChatCompletionMessage>, output_tx: tokio::sync::broadcast::Sender<UserEvent>, chat_completer: Box<dyn ChatCompleter>) -> Self {
         Self {
             space_id,
@@ -423,13 +424,16 @@ impl ResponseWorker {
     }
 }
 
+// TODO: Create more dynamic use of transcribers based on requirements of users within space
+// I.e. Realtime API will generate transcriptions itself, whereas other agent types require outside transcription
 pub struct SpaceWorker {
     pub space_id: Thing,
     pub token: CancellationToken,
     pub space_transcriber: TranscriberWorker,
     pub user_transcribers: HashMap<Thing, TranscriberWorker>,
     pub output_tx: tokio::sync::broadcast::Sender<UserEvent>,
-    pub output_rx: tokio::sync::broadcast::Receiver<UserEvent>
+    pub output_rx: tokio::sync::broadcast::Receiver<UserEvent>,
+    pub use_transcribers: bool
 }
 
 impl SpaceWorker {
@@ -446,27 +450,30 @@ impl SpaceWorker {
             user_transcribers: Default::default(),
             output_tx: output_tx,
             output_rx: output_rx,
+            use_transcribers: false
         }
     }
 
     pub fn send_event(&mut self, ev: UserEvent) -> Result<()> {
-        match ev.user_event_type.clone().unwrap() {
-            UserEventType::SpeakBytesEvent(speak_bytes_ev) => {
-                if let Some(user_id) = ev.user_id.clone() {
-                    //println!("Got user speak bytes, sending to transcriber.");
-                    let transcriber = match self.user_transcribers.entry(user_id.clone()) {
-                        Entry::Occupied(o) => o.into_mut(),
-                        Entry::Vacant(v) => {
-                            v.insert(bevy::tasks::block_on(Compat::new(TranscriberWorker::new(self.space_id.clone(), Some(user_id), self.output_tx.clone()))))
-                        },
-                    };
-                    transcriber.send(speak_bytes_ev.data)?;
-                } else {
-                    self.space_transcriber.send(speak_bytes_ev.data)?;
+        if self.use_transcribers {
+            match ev.user_event_type.clone().unwrap() {
+                UserEventType::SpeakBytesEvent(speak_bytes_ev) => {
+                    if let Some(user_id) = ev.user_id.clone() {
+                        //println!("Got user speak bytes, sending to transcriber.");
+                        let transcriber = match self.user_transcribers.entry(user_id.clone()) {
+                            Entry::Occupied(o) => o.into_mut(),
+                            Entry::Vacant(v) => {
+                                v.insert(bevy::tasks::block_on(Compat::new(TranscriberWorker::new(self.space_id.clone(), Some(user_id), self.output_tx.clone()))))
+                            },
+                        };
+                        transcriber.send(speak_bytes_ev.data)?;
+                    } else {
+                        self.space_transcriber.send(speak_bytes_ev.data)?;
+                    }
+                },
+                _ => {
+    
                 }
-            },
-            _ => {
-
             }
         }
         Ok(())
@@ -480,7 +487,10 @@ impl SpaceWorker {
 
 pub struct AgentState {
     pub user_id: Thing,
-    //pub space_id: Thing,
+    // TODO: Remove this property and enable multiple spaces using Realtime API
+    // Agents not using Realtime API don't require this
+    pub primary_space_id: Thing,
+    pub realtime_api: Option<ChatGPTRealtime>,
     pub synthesizer: Option<Box<dyn Synthesizer>>,
     pub messages: HashMap<Thing, Vec<ChatCompletionMessage>>,
     pub functions: Vec<Function>,
@@ -491,7 +501,7 @@ pub struct AgentState {
     pub input_rx: tokio::sync::broadcast::Receiver<UserEvent>,
     pub asset_cache: Arc<Mutex<AssetCache>>,
     pub cancel_tx: tokio::sync::broadcast::Sender<()>,
-    pub chat_completer: Box<dyn ChatCompleter>,
+    pub chat_completer: Option<Box<dyn ChatCompleter>>,
     pub current_emotion: String,
     pub last_image_time: Option<Instant>,
     pub user_transcribers: HashMap<Thing, SpaceWorker>,
@@ -502,16 +512,17 @@ pub struct AgentState {
 
 impl AgentWorker {
 
-    pub async fn new(user_id: Thing, config: AgentConfig) -> Self {
+    pub async fn new(user_id: Thing, primary_space_id: Thing, config: AgentConfig) -> Self {
 
         let mut functions = Vec::<Function>::new();
 
-        let name = config.name.clone();
+        let agent_name = config.name.clone();
         let voice_id = config.voice_id.clone();
-   
-        let task_configs: Vec<TaskConfig> = config.task_configs_by_name.values().map(|x|x.to_owned()).collect();
 
-        //println!("Initializing agent with system prompt:\n\n{}\n\n", system_prompt.clone());
+        let task_configs: Vec<TaskConfig> = config.task_configs_by_name.values().map(|x|x.to_owned()).collect();
+        let system_prompt = config.description.clone();
+
+        println!("Initializing agent with system prompt:\n\n{}\n\n", system_prompt.clone());
 
         let (input_tx, mut input_rx) = tokio::sync::broadcast::channel::<UserEvent>(512);
         let (output_tx, mut output_rx) = tokio::sync::broadcast::channel::<UserEvent>(512);
@@ -544,7 +555,6 @@ impl AgentWorker {
 
         //let _space_id = space_id.clone();
 
-
         #[cfg(not(feature="server"))]
         #[cfg(not(target_arch="wasm32"))]
         let chat_completer = ChatGPTChatCompleter::new_from_env();
@@ -563,7 +573,7 @@ impl AgentWorker {
             user_transcribers: Default::default(),
             synthesizer: None,
             space_transcribers: Default::default(),
-            chat_completer: Box::new(chat_completer),
+            chat_completer: Some(Box::new(chat_completer)),
             messages: Default::default(),
             functions: functions,
             output_tx: output_tx.clone(),
@@ -575,21 +585,29 @@ impl AgentWorker {
             cancel_tx: cancel_tx,
             current_emotion: "default".to_string(),
             last_image_time: None,
-            running_contexts: Default::default()
+            running_contexts: Default::default(),
+            realtime_api: None,
+            /*
+            Some({
+                let mut api = ChatGPTRealtime::new_from_env().await;
+                api.send(RealtimeEvent::Text(system_prompt)).await;
+                api
+            }),
+            */
+            primary_space_id: primary_space_id,
         }));
 
         let _state = state.clone();
 
         tokio::task::spawn(async move {
             //Self::get_some_response(_state.clone()).await.expect("Failed to get first response!");
-
             while let Ok(ev) = _input_rx.recv().await {
                 //if let Some(UserEventType::SpeakBytesEvent(args)) = ev.user_event_type {
                     //println!("Received audio: {}", args.data.len());
                 //    _state.lock().await.space_transcribers.get(k)
                 //    transcriber_input_tx.send(Bytes::from_iter(args.data)).unwrap();
                 //} else {
-                _state.lock().await.process_user_event(ev).await.expect("Failed to get response to user event!");
+                _state.lock().await.process_input_event(ev).await.expect("Failed to get response to user event!");
                 //}
             }
         });
@@ -605,7 +623,7 @@ impl AgentWorker {
         let _agent_token = agent_token.clone();
 
         let _state = state.clone();
-        let _name = name.clone();
+        let _name = agent_name.clone();
         
         //let _space_id = space_id.clone();
         // TODO: Rework with new Bevy implementation
@@ -657,7 +675,7 @@ impl AgentWorker {
         //let _space_id = space_id.clone();
         tokio::task::spawn(async move {
             tokio::select! {
-                _ = Self::process_response(_state, name, user_id.clone(), _output_tx, input_rx, voice_id.clone(), asset_cache.clone(), voice_tx.clone()) => {
+                _ = Self::process_response(_state, user_id.clone(), _output_tx, input_rx, voice_id.clone(), asset_cache.clone(), voice_tx.clone()) => {
   
                 },
                 _ = cancel_rx.recv() => {
@@ -665,7 +683,8 @@ impl AgentWorker {
                 }
             }
         });
-        println!("Initialized agent.");
+
+        println!("Initialized agent: {}", agent_name);
 
         //_self.state.lock().await.input_event(UserEvent::new(Thing::new(), space_id.clone(), UserEventType::WaitEvent(WaitEvent {})));
 
@@ -673,92 +692,148 @@ impl AgentWorker {
     }
 
 
-    async fn process_response(state: Arc<Mutex<AgentState>>, name: String, user_id: Thing, output_tx: tokio::sync::broadcast::Sender<UserEvent>, mut input_rx: tokio::sync::broadcast::Receiver<UserEvent>, voice_id: String, asset_cache: Arc<Mutex<AssetCache>>, voice_tx: async_channel::Sender<UserEvent>) {
-        #[cfg(not(feature="server"))]
-        #[cfg(feature="game")]
-        let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
-        #[cfg(not(feature="server"))]
-        #[cfg(not(feature="game"))]
-        let synthesizer = Arc::new(CoquiSynthesizer::new());
-        #[cfg(feature="server")]
-        //let synthesizer = Arc::new(AzureSynthesizer::new_from_env());
-        let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
+    async fn process_response(state: Arc<Mutex<AgentState>>, user_id: Thing, output_tx: tokio::sync::broadcast::Sender<UserEvent>, mut input_rx: tokio::sync::broadcast::Receiver<UserEvent>, voice_id: String, asset_cache: Arc<Mutex<AssetCache>>, voice_tx: async_channel::Sender<UserEvent>) {
+        let mut realtime_api_output_rx = if let Some(api) = &state.lock().await.realtime_api {
+            Some(api.output_rx.resubscribe())
+        } else {
+            None
+        };
 
-        while let Ok(ev) = input_rx.recv().await {
+        let voice_id = state.lock().await.config.voice_id.clone();
+        let name = state.lock().await.config.name.clone();
+        let primary_space_id = state.lock().await.primary_space_id.clone();
 
-            let _space_id = ev.space_id.clone().unwrap();
+        if let Some(mut realtime_api_output_rx) = realtime_api_output_rx {
 
-            let ev_description = ev.get_event_description().unwrap();
-            //log(format!("Processing event elsewhere: {}", ev_description));  
+            /*
+            let mut realtime_buffer = vec![];
 
-            //let args = ev.args;
-            //let token = ev.token;
+            let clear_buffer = async |buffer: &mut Vec<u8>| {
+                let converter = super::ElevenLabsConverter::new_from_env();
 
-            //if token.is_cancelled() {
-            //    continue;
-            //}
+                let wav_data = empathic_audio::samples_to_wav(1, 16000, 16, buffer.to_vec());
+                println!("Converting...");
+                let result = converter.convert_voice(voice_id.clone(), wav_data).await?;
+                println!("Converted.");
 
-            if let Some(context_id) = ev.context_id.clone() {
-                if !state.lock().await.is_context_running(context_id) {
-                    continue;
-                }
-            }
- 
-            if let Some(_user_id) = ev.user_id.clone() {
-                if _user_id == user_id {
-                    if let Some(UserEventType::SpeakEvent(args)) = ev.user_event_type.clone() {
-                        //state.lock().await.new_message(_space_id.clone(), Role::Agent, Content::Text(args.text.clone()));
-                        output_tx.send(ev.clone());
-                   
-                        log(format!("[{}] Processing self event: {}", name, ev_description));
+                output_tx.send(UserEvent::new(Some(user_id.clone()), primary_space_id.clone(), UserEventType::SpeakBytesEvent(SpeakBytesEvent { data: result.bytes }))).unwrap();
+                buffer.clear();
+                Ok::<_, anyhow::Error>(())
+            };
+            */
 
-                        //println!("Processing speak event: {}", args.text.clone());
-                        //let voice_name = "smexy-frog".to_string();
-                        let voice_name = voice_id.clone();
-                        let speech_text = args.text.clone();
-                        let emotion = "default".to_string();
-                
-                        let _speech_text = speech_text.clone();
-                
-                        let synthesizer = synthesizer.clone();
-                        let load_func = async move {
-                            let result = synthesizer.create_speech(emotion, voice_name, _speech_text.clone()).await?;
-                
-                            let bytes = result.bytes.to_vec();
-                            //let bytes = samples_to_wav(1, 24000, 16, bytes);
-                            Ok(crate::asset_cache::Asset::new(bytes))
-                        };
-    
-                        let asset_id = Uuid::new_v4().to_string();
-                
-                        //let user_id = self.agent.get_user_id().clone();
-                
-                        asset_cache.lock().await.load_asset(asset_id.clone(), load_func, false).await.expect("Asset load error");
-                
-                        voice_tx.send(UserEvent::new_with_context(Some(user_id.clone()), _space_id.clone(), ev.context_id.clone().unwrap(), UserEventType::SpeakResultEvent(SpeakResultEvent{ asset_id: asset_id, text: speech_text.clone() }))).await;
-                         
-                    } else if let Some(UserEventType::SingEvent(args)) = ev.user_event_type {
-    
-                        let _output_tx = output_tx.clone();
-                        let _user_id = user_id.clone();
-                        tokio::spawn(async move {
-    
-                            let song_name = args.song_name.replace(" ", "_").to_string();
-                            println!("SINGING SONG: {}", song_name.clone());
-    
-                            let mut receiver = empathic_audio::read_wav_chunks(format!("assets/songs/{}_anatra.wav", song_name.clone()), Duration::from_millis(500), 24000, 1).await;
-            
-                            while let Some(data) = receiver.recv().await {
-            
-                                let data = empathic_audio::samples_to_wav(1, 24000, 16, data);
-            
-                                _output_tx.send(UserEvent::new(Some(_user_id.clone()), _space_id.clone(), UserEventType::SpeakBytesEvent(SpeakBytesEvent{ data: data }))).unwrap();
-                            }
-                            println!("Done playing song.");
-                        });
+            while let Ok(ev) = realtime_api_output_rx.recv().await {
+                match ev {
+                    RealtimeEvent::Text(text) => {
+
+                    }
+                    RealtimeEvent::Audio(bytes) => {
+                        output_tx.send(UserEvent::new(Some(user_id.clone()), primary_space_id.clone(), UserEventType::SpeakBytesEvent(SpeakBytesEvent { data: bytes.to_vec() }))).unwrap();
+
+                        /*
+                        realtime_buffer.append(&mut bytes.to_vec());
+                        let duration = empathic_audio::get_duration(realtime_buffer.len(), 1, 16000, 16);
+                        if duration > 2.0 {
+                            clear_buffer(&mut realtime_buffer).await.expect("Failed to clear buffer");
+                        }
+                        */
+                    }
+                    RealtimeEvent::AudioEnd => {
+                        //let duration = empathic_audio::get_duration(realtime_buffer.len(), 1, 16000, 16);
+                        //if duration > 0.5 {
+                        //    clear_buffer(&mut realtime_buffer).await.expect("Failed to clear buffer");
+                        //}
                     }
                 }
             }
+        } else {
+            
+            #[cfg(not(feature="server"))]
+            #[cfg(feature="game")]
+            let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
+            #[cfg(not(feature="server"))]
+            #[cfg(not(feature="game"))]
+            let synthesizer = Arc::new(CoquiSynthesizer::new());
+            #[cfg(feature="server")]
+            //let synthesizer = Arc::new(AzureSynthesizer::new_from_env());
+            let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
+
+            while let Ok(ev) = input_rx.recv().await {
+
+                let _space_id = ev.space_id.clone().unwrap();
+
+                let ev_description = ev.get_event_description().unwrap();
+                //log(format!("Processing event elsewhere: {}", ev_description));  
+
+                //let args = ev.args;
+                //let token = ev.token;
+
+                //if token.is_cancelled() {
+                //    continue;
+                //}
+
+                if let Some(context_id) = ev.context_id.clone() {
+                    if !state.lock().await.is_context_running(context_id) {
+                        continue;
+                    }
+                }
+    
+                if let Some(_user_id) = ev.user_id.clone() {
+                    if _user_id == user_id {
+                        if let Some(UserEventType::SpeakEvent(args)) = ev.user_event_type.clone() {
+                            //state.lock().await.new_message(_space_id.clone(), Role::Agent, Content::Text(args.text.clone()));
+                            output_tx.send(ev.clone());
+                    
+                            log(format!("[{}] Processing self event: {}", name, ev_description));
+
+                            //println!("Processing speak event: {}", args.text.clone());
+                            //let voice_name = "smexy-frog".to_string();
+                            let voice_name = voice_id.clone();
+                            let speech_text = args.text.clone();
+                            let emotion = "default".to_string();
+                    
+                            let _speech_text = speech_text.clone();
+                    
+                            let synthesizer = synthesizer.clone();
+                            let load_func = async move {
+                                let result = synthesizer.create_speech(emotion, voice_name, _speech_text.clone()).await?;
+                    
+                                let bytes = result.bytes.to_vec();
+                                //let bytes = samples_to_wav(1, 24000, 16, bytes);
+                                Ok(crate::asset_cache::Asset::new(bytes))
+                            };
+        
+                            let asset_id = Uuid::new_v4().to_string();
+                    
+                            //let user_id = self.agent.get_user_id().clone();
+                    
+                            asset_cache.lock().await.load_asset(asset_id.clone(), load_func, false).await.expect("Asset load error");
+                    
+                            voice_tx.send(UserEvent::new_with_context(Some(user_id.clone()), _space_id.clone(), ev.context_id.clone().unwrap(), UserEventType::SpeakResultEvent(SpeakResultEvent{ asset_id: asset_id, text: speech_text.clone() }))).await;
+                            
+                        } else if let Some(UserEventType::SingEvent(args)) = ev.user_event_type {
+        
+                            let _output_tx = output_tx.clone();
+                            let _user_id = user_id.clone();
+                            tokio::spawn(async move {
+        
+                                let song_name = args.song_name.replace(" ", "_").to_string();
+                                println!("SINGING SONG: {}", song_name.clone());
+        
+                                let mut receiver = empathic_audio::read_wav_chunks(format!("assets/songs/{}_anatra.wav", song_name.clone()), Duration::from_millis(500), 24000, 1).await;
+                
+                                while let Some(data) = receiver.recv().await {
+                
+                                    let data = empathic_audio::samples_to_wav(1, 24000, 16, data);
+                
+                                    _output_tx.send(UserEvent::new(Some(_user_id.clone()), _space_id.clone(), UserEventType::SpeakBytesEvent(SpeakBytesEvent{ data: data }))).unwrap();
+                                }
+                                println!("Done playing song.");
+                            });
+                        }
+                    }
+                }
+            }   
         }
     }
 
@@ -788,102 +863,84 @@ impl UserEventWorker for AgentWorker {
 
 impl AgentState {
     
-    pub async fn process_user_event(&mut self, ev: UserEvent) -> Result<()> {
-
- 
-        let ev_name = ev.get_event_name()?;
-        let ev_description = ev.get_event_description()?;
-
-        let space_id = ev.space_id.clone().unwrap();
-
-        //println!("Processing event.: {}", ev_name);
-        
-        // Todo: Abort previous future if new submission is received (see OpenAI playground for recommendations)
-       
-        //log(format!("AGENT RECEVED TASK OF TYPE {}", user_task.args.0.type_name()));
-
-        // TODO: handle other task types
-        //if user_task.AuthorUserId == self.userId {
-        //    return;
-        //}
-        //let _self = Arc::new(self);
-        //let _self = Arc::clone(&self);
-
-        let mut is_image = false;
-
-        let content = match ev.user_event_type.as_ref().unwrap() {
-            UserEventType::ImageBytesEvent(ev) => {
-                if let Some(last_image_time) = self.last_image_time {
-                    if Instant::now().duration_since(last_image_time) < Duration::from_secs(30) {
-                        return Ok(());
-                    }
-                }
-                self.last_image_time = Some(Instant::now());
-                is_image = true;
-
-                println!("GOT IMAGE EVENT! PROCESSING IMAGE");
-
-                let data = base64::encode(ev.data.clone());
-                let v = vec![ImageUrl { r#type: ContentType::image_url, text: None, image_url: Some(ImageUrlType { url: format!("data:image/jpeg;base64,{}",data) }) }];
-                Content::ImageUrl(v)
-            },
-            _ => {
-                if !self.get_config().task_configs_by_name.contains_key(&ev_name) {
-                    //println!("Task doesn't exist in agent config!");
-                    return Ok(());
-                }
-
-                Content::Text(ev_description.clone())    
-            }
-        };
-
-        //for arg in ev.args.0.as_ref()
-
-        //let speech_task = ev.args.into_reflect().downcast::<SpeakEventArgs>().unwrap();
+    pub async fn process_input_event(&mut self, ev: UserEvent) -> Result<()> {
 
         let user_id = self.get_user_id();
-        //let prompt_text = Self::wrap_speech_text(speech_task.voice_name, speech_task.text.clone());
-        
-        //println!("Processing prompt: {}", prompt_text);
-
-        let role = if ev.user_id.clone().unwrap() == user_id {
-            Role::Agent
-        } else {
-            Role::Human
-        };
-
-        //for message in self.messages.to_vec() {
-        //    println!("{:?}: {}", message.role.unwrap(), message.content.unwrap());
-        //}
-        
-        let ev_user_id = ev.user_id;
+        let ev_user_id = &ev.user_id;
 
         if ev_user_id.as_ref().unwrap() == &user_id {
             return Ok(());
         }
+
+        let ev_name = ev.get_event_name()?;
+        let ev_description = ev.get_event_description()?;
+        let space_id = ev.space_id.clone().unwrap();
+
+        if let Some(api) = &mut self.realtime_api {
+            if let Some(UserEventType::SpeakBytesEvent(args)) = ev.user_event_type {
+                api.send(RealtimeEvent::Audio(Bytes::from(args.data))).await;
+            }
+        } else {
+            let mut is_image = false;
+
+            let content = match ev.user_event_type.as_ref().unwrap() {
+                UserEventType::ImageBytesEvent(ev) => {
+                    if let Some(last_image_time) = self.last_image_time {
+                        if Instant::now().duration_since(last_image_time) < Duration::from_secs(30) {
+                            return Ok(());
+                        }
+                    }
+                    self.last_image_time = Some(Instant::now());
+                    is_image = true;
+    
+                    println!("GOT IMAGE EVENT! PROCESSING IMAGE");
+    
+                    let data = base64::encode(ev.data.clone());
+                    let v = vec![ImageUrl { r#type: ContentType::image_url, text: None, image_url: Some(ImageUrlType { url: format!("data:image/jpeg;base64,{}",data) }) }];
+                    Content::ImageUrl(v)
+                },
+                _ => {
+                    if !self.get_config().task_configs_by_name.contains_key(&ev_name) {
+                        return Ok(());
+                    }
+    
+                    Content::Text(ev_description.clone())    
+                }
+            };
         
-        log(format!("[{}] Processing other ({}) event: {}", self.config.name, ev_user_id.clone().unwrap_or(Thing::from("None")), ev_description));
+            //for arg in ev.args.0.as_ref()
 
-        //let (sx, rx) = async_channel::unbounded::<Pin<Box<dyn Future<Output = ()>>>>();
+            //let speech_task = ev.args.into_reflect().downcast::<SpeakEventArgs>().unwrap();
 
-        //let character_name = self.get_config().name.clone();
+            //let prompt_text = Self::wrap_speech_text(speech_task.voice_name, speech_task.text.clone());
+            
+            //println!("Processing prompt: {}", prompt_text);
 
-        //let is_system = false;
+            //for message in self.messages.to_vec() {
+            //    println!("{:?}: {}", message.role.unwrap(), message.content.unwrap());
+            //}
+            
+            log(format!("[{}] Processing other ({}) event: {}", self.config.name, ev_user_id.clone().unwrap_or(Thing::from("None")), ev_description));
 
-        //let _voice_name = self.config.azure_voice_name.clone();
-        //let _uberduck_id = self.config.uberduck_id;
+            //let (sx, rx) = async_channel::unbounded::<Pin<Box<dyn Future<Output = ()>>>>();
 
-        //let use_camera = self.use_camera;
+            //let character_name = self.get_config().name.clone();
 
-        //let _self = Arc::clone(&_self);
-        //let sx = sx.clone();
+            //let is_system = false;
 
-        // Gets response from ChatGPT
+            //let _voice_name = self.config.azure_voice_name.clone();
+            //let _uberduck_id = self.config.uberduck_id;
 
-        //let prompt_text = prompt_text;
-        self.new_message(space_id.clone(), role, content);
-        if !is_image {
-            self.get_response(space_id).await?;
+            //let use_camera = self.use_camera;
+
+            //let _self = Arc::clone(&_self);
+            //let sx = sx.clone();
+
+            //let prompt_text = prompt_text;
+            self.new_message(space_id.clone(), Role::Human, content);
+            if !is_image {
+                self.get_chat_completion_response(space_id).await?;
+            }
         }
 
         Ok(())
@@ -893,7 +950,7 @@ impl AgentState {
         self.running_contexts.contains_key(&context_id)
     }
 
-    pub async fn get_response(&mut self, space_id: Thing) -> Result<()> {
+    pub async fn get_chat_completion_response(&mut self, space_id: Thing) -> Result<()> {
         self.running_contexts.retain(|k, mut v| {
             v.send(());
             false
@@ -904,8 +961,9 @@ impl AgentState {
         let context_id = Thing::new();
         self.running_contexts.insert(context_id.clone(), cancel_tx);
 
-        let chat_completer = dyn_clone::clone_box(&*self.chat_completer);
-        let mut response_worker = ResponseWorker::new(space_id.clone(), self.user_id.clone(), context_id, self.config.clone(), self.get_messages(&space_id).clone(), self.input_tx.clone(), chat_completer);
+        //let x = .unwrap();
+        let chat_completer = dyn_clone::clone_box(&*self.chat_completer.as_deref().unwrap());
+        let mut response_worker = ChatCompletionResponseWorker::new(space_id.clone(), self.user_id.clone(), context_id, self.config.clone(), self.get_messages(&space_id).clone(), self.input_tx.clone(), chat_completer);
 
         tokio::task::spawn(async move {
             tokio::select! {

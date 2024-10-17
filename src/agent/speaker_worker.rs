@@ -43,7 +43,7 @@ pub struct SpeakerWorker {
 }
 
 impl SpeakerWorker {
-	pub fn new(device_name: Option<String>, space_id: Thing, user_id: Thing) -> Self {
+	pub fn new(space_id: Thing, user_id: Thing, device_name: Option<String>) -> Self {
 		let host = cpal::default_host();
 
 		let device = {
@@ -76,9 +76,9 @@ impl SpeakerWorker {
 		}
 
 		let mut config = config.config();
-		config.buffer_size = BufferSize::Fixed(10);
+		config.buffer_size = BufferSize::Fixed(1);
 
-		let latency_frames = (150.0 / 1_000.0) * config.sample_rate.0 as f32;
+		let latency_frames = (100.0 / 1_000.0) * config.sample_rate.0 as f32;
 		let latency_samples = latency_frames as usize * config.channels as usize;
 	
 		/*
@@ -98,7 +98,7 @@ impl SpeakerWorker {
 		println!("Speaker sample format: {}", sample_format);
 		//println!("Sample size: {}", sample_size);
 
-		let (tx, mut rx) = tokio::sync::mpsc::channel::<Bytes>(256);
+		let (tx, mut rx) = tokio::sync::mpsc::channel::<Bytes>(32);
 		//let mut buffer = Arc::new(Mutex::new(AudioBuffer::new(channels)));
 
 		//let _buffer = buffer.clone();
@@ -151,21 +151,21 @@ impl SpeakerWorker {
 				cpal::SampleFormat::F32 => {
 
 					// Previously 2
-					let rb = HeapRb::<f32>::new(latency_samples * 300);
+					let rb = HeapRb::<f32>::new(latency_samples * 100);
 					let (mut prod, mut cons) = rb.split();
 
-					for _ in 0..latency_samples {
+					//for _ in 0..latency_samples {
 						// The ring buffer has twice as much space as necessary to add latency here,
 						// so this should never fail
-						prod.try_push(0.0).unwrap();
-					}
+					//	prod.try_push(0.0).unwrap();
+					//}
 
 					std::thread::spawn(move || {
 						loop {
 							if let Some(data) = try_recv_data(_user_id.clone(), &mut rx) {
 								
-								let data = empathic_audio::resample_pcm(data.to_vec(), 24000, sample_rate, 1, 2, 16, 16).unwrap();
-								let data = empathic_audio::convert_u8_to_f32(&data, 2, 16).unwrap();
+								let data = empathic_audio::resample_pcm(data.to_vec(), 16000, sample_rate, 1, channels as u32, 16, 16).unwrap();
+								let data = empathic_audio::convert_u8_to_f32(&data, channels as u32, 16).unwrap();
 			
 								prod.push_slice(&data);
 
@@ -311,27 +311,12 @@ impl UserEventWorker for SpeakerWorker {
 	}
 
 	fn send_event(&mut self, ev: UserEvent) -> anyhow::Result<()> {
-		if self.user_id != *ev.user_id.as_ref().unwrap() {
-			//println!("Speaker worker got event!");
-
-			if ev.user_id.unwrap() == self.user_id {
-				if let UserEvent { user_id: _, space_id: _, context_id: _, user_event_type: Some(UserEventType::SpeakBytesEvent(ev)) } = ev {
-					let data = ev.data;
-					self.input_tx.blocking_send(Bytes::from(data))?;
-				}
-
+		if ev.user_id.unwrap() == self.user_id {
+			if let UserEvent { user_id: _, space_id: _, context_id: _, user_event_type: Some(UserEventType::SpeakBytesEvent(ev)) } = ev {
+				let data = ev.data;
+				self.input_tx.blocking_send(Bytes::from(data))?;
 			}
-
 		}
-
-		/* 
-		if let UserEvent { user_id: _, space_id: _, context_id: _, user_event_type: Some(UserEventType::SpeakBytesEvent(ev)) } = ev {
-			let data = ev.data;
-			let data = empathic_audio::resample_pcm(data.to_vec(), 16000, self.sample_rate, 2, 2, 16, 16).unwrap();
-			let data = empathic_audio::convert_u8_to_f32(&data, 2, 16).unwrap();
-
-			self.buffer.lock().unwrap().write_data(data);
-		}*/
 
 		Ok(())
 	}
