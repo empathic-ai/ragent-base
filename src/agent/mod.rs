@@ -32,8 +32,10 @@ use async_trait::async_trait;
 pub mod agent_worker;
 pub use agent_worker::*;
 
+#[cfg(not(target_os = "android"))]
 #[cfg(not(target_arch = "wasm32"))]
 pub mod converter_worker;
+#[cfg(not(target_os = "android"))]
 #[cfg(not(target_arch = "wasm32"))]
 pub use converter_worker::*;
 
