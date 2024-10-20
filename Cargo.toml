@@ -20,7 +20,7 @@ anthropic = ["dep:anthropic"]
 [dependencies]
 bevy_builder = { git = "https://github.com/empathic-ai/bevy-builder.git", optional = true }
 ragent_core = { git = "https://github.com/empathic-ai/ragent-core.git", default-features = false }
-ragent_derive = { git = "https://github.com/empathic-ai/ragent-derive.git" }
+ragent_derive = { git = "https://github.com/empathic-ai/ragent-derive.git", default-features = false }
 empathic_audio = { git = "https://github.com/empathic-ai/empathic-audio.git" }
 bevy-trait-query = { git = "https://github.com/dead-money/bevy-trait-query.git", branch = "bevy-0.14", optional = true }
 common = { git = "https://github.com/empathic-ai/common.git", default-features = false }
@@ -69,7 +69,7 @@ tokio-tungstenite = "0.24.0"
 # my-workspace-hack = { version = "0.1", path = "../../../my-workspace-hack" }
 
 [target.'cfg(not(target_arch = "xtensa"))'.dependencies]
-reqwest = { version = "0.12.4", features = ["json", "stream", "multipart"] }
+reqwest = { version = "0.12.4", default-features = false, features = ["rustls-tls", "json", "stream", "multipart"] }
 
 [target.'cfg(all(not(target_arch = "xtensa"), not(target_arch = "wasm32"), not(target_os = "android")))'.dependencies]
 openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git" }
@@ -78,11 +78,11 @@ anthropic = { git = "https://github.com/AbdelStark/anthropic-rs.git", default-fe
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git", optional = true }
-hf-hub = { git = "https://github.com/huggingface/hf-hub.git", features = ["tokio"], optional = true }
+hf-hub = { git = "https://github.com/Catchawink/hf-hub.git", default-features = false, features = ["rustls-tls", "ureq", "tokio"], optional = true }
 cpal = { version = "0.15.3" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-hf-hub = { git = "https://github.com/huggingface/hf-hub.git", default-features = false, optional = true }
+hf-hub = { git = "https://github.com/Catchawink/hf-hub.git", default-features = false, features = ["rustls-tls"], optional = true }
 cpal = { version = "0.15.3", features = ["wasm-bindgen"] }
 
 [dependencies.bevy]

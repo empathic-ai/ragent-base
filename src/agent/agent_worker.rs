@@ -493,7 +493,7 @@ pub struct AgentState {
     // TODO: Remove this property and enable multiple spaces using Realtime API
     // Agents not using Realtime API don't require this
     pub primary_space_id: Thing,
-    pub realtime_api: Option<ChatGPTRealtime>,
+    pub realtime_api: Option<Box<dyn Realtime>>,
     pub synthesizer: Option<Box<dyn Synthesizer>>,
     pub messages: HashMap<Thing, Vec<ChatCompletionMessage>>,
     pub functions: Vec<Function>,
@@ -698,7 +698,7 @@ impl AgentWorker {
 
     async fn process_response(state: Arc<Mutex<AgentState>>, user_id: Thing, output_tx: tokio::sync::broadcast::Sender<UserEvent>, mut input_rx: tokio::sync::broadcast::Receiver<UserEvent>, voice_id: String, asset_cache: Arc<Mutex<AssetCache>>, voice_tx: async_channel::Sender<UserEvent>) {
         let mut realtime_api_output_rx = if let Some(api) = &state.lock().await.realtime_api {
-            Some(api.output_rx.resubscribe())
+            Some(api.get_receiver())
         } else {
             None
         };
@@ -708,7 +708,7 @@ impl AgentWorker {
         let primary_space_id = state.lock().await.primary_space_id.clone();
 
         if let Some(mut realtime_api_output_rx) = realtime_api_output_rx {
-
+ 
             /*
             let mut realtime_buffer = vec![];
 
