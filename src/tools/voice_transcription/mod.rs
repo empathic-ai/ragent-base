@@ -1,18 +1,12 @@
-#[cfg(not(target_arch = "wasm32"))]
-#[cfg(not(target_arch = "xtensa"))]
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android")))]
 pub mod deepgram_transcriber;
-#[cfg(not(target_arch = "wasm32"))]
-#[cfg(not(target_arch = "xtensa"))]
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android")))]
 pub use deepgram_transcriber::*;
 
-#[cfg(not(target_arch = "wasm32"))]
-#[cfg(not(target_arch = "xtensa"))]
+#[cfg(not(any(target_arch = "wasm32", target_arch = "xtensa")))]
 #[cfg(feature = "candle")]
 pub mod whisper_transcriber;
-#[cfg(not(target_arch = "wasm32"))]
-#[cfg(not(target_arch = "xtensa"))]
+#[cfg(not(any(target_arch = "wasm32", target_arch = "xtensa")))]
 #[cfg(feature = "candle")]
 pub use whisper_transcriber::*;
 

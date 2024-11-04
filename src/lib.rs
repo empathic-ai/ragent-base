@@ -11,14 +11,22 @@ use std::any::Any;
 
 pub use crate::service::user_event::UserEventType;
 pub use crate::service::UserEvent;
-use bevy::ecs::event;
+
+#[cfg(feature = "bevy")]
+use bevy::prelude::*;
+#[cfg(feature = "bevy")]
 use bevy::prelude::FromReflect;
+#[cfg(feature = "bevy")]
 use bevy::reflect::{DynamicEnum, DynamicTuple, DynamicTupleStruct, TypeData};
+#[cfg(feature = "bevy")]
 use bevy::reflect::{
     DynamicStruct, DynamicTypePath, DynamicVariant, Enum, Reflect, ReflectFromReflect, ReflectRef,
     TypeInfo, TypePath, TypeRegistration, TypeRegistry, Typed, VariantInfo,
 };
+
+#[cfg(feature = "bevy")]
 pub use bevy_builder::prelude::Thing;
+#[cfg(not(target_arch = "xtensa"))]
 use prelude::{get_event_name_from_type, get_event_name_from_type_name, SpeakEvent};
 pub use ragent_core;
 pub use ragent_derive;
@@ -26,30 +34,40 @@ use serde::{Deserialize, Serialize};
 
 use anyhow::{anyhow, Result};
 
+#[cfg(not(target_arch = "xtensa"))]
 pub mod agent;
 pub mod asset_cache;
+#[cfg(not(target_arch = "xtensa"))]
 pub mod config;
+#[cfg(not(target_arch = "xtensa"))]
 pub mod tasks;
+#[cfg(not(target_arch = "xtensa"))]
 pub mod tools;
 
 use ragent_core::prelude::*;
 
 pub mod prelude {
+    #[cfg(not(target_arch = "xtensa"))]
     pub use crate::agent::*;
     pub use crate::asset_cache::*;
+    #[cfg(not(target_arch = "xtensa"))]
     pub use crate::config::*;
+    #[cfg(not(target_arch = "xtensa"))]
     pub use crate::tasks::*;
 
     pub use crate::ragent_core::prelude::*;
     pub use crate::ragent_derive::*;
+    #[cfg(not(target_arch = "xtensa"))]
     pub use crate::tools::*;
 
     pub use crate::service::*;
     pub use crate::UserEvent;
     pub use crate::UserEventType;
+    #[cfg(feature = "bevy")]
     pub use bevy_builder::prelude::Thing;
 }
 
+#[cfg(not(target_arch = "xtensa"))]
 impl UserEventType {
     pub fn from<T>(event_args: Vec<String>) -> Result<UserEventType>
     where
@@ -185,6 +203,7 @@ impl UserEventType {
     */
 }
 
+#[cfg(not(target_arch = "xtensa"))]
 impl UserEvent {
     pub fn new(user_id: Option<Thing>, space_id: Thing, ev: UserEventType) -> Self {
         UserEvent {

@@ -1,7 +1,6 @@
 use async_channel::{Sender, Receiver};
 use agent_worker::{coqui_synthesizer::CoquiSynthesizer};
 
-use bevy::utils::HashSet;
 use bytes::Bytes;
 use collections::hash_map::Entry;
 use futures_lite::StreamExt;
@@ -31,11 +30,10 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use substring::Substring;
 use fancy_regex::Regex;
-use bevy::ecs::component;
+
 //use rodio::{Decoder, OutputStream, source::Source};
 
-//#[cfg_attr(feature = "bevy", derive(Component))]
-#[derive(Component)]
+#[cfg_attr(feature = "bevy", derive(Component))]
 pub struct AgentWorker {
     pub user_id: Thing,
     pub state: Arc<Mutex<AgentState>>,

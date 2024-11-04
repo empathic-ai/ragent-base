@@ -3,27 +3,17 @@ use bytes::Bytes;
 use anyhow::Result;
 use std::collections::HashMap;
 
-#[cfg(not(target_arch = "wasm32"))]
-#[cfg(not(target_arch = "xtensa"))]
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android")))]
 pub mod openai_synthesizer;
-#[cfg(not(target_arch = "wasm32"))]
-#[cfg(not(target_arch = "xtensa"))]
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android")))]
 pub mod play_ht_synthesizer;
-#[cfg(not(target_arch = "wasm32"))]
-#[cfg(not(target_arch = "xtensa"))]
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android")))]
 pub mod eleven_labs_synthesizer;
-#[cfg(not(target_arch = "wasm32"))]
-#[cfg(not(target_arch = "xtensa"))]
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android")))]
 pub mod azure_synthesizer;
 
 // Will need to likely add WASM support to 'hf_hub' crate for this
-#[cfg(not(target_arch = "wasm32"))]
-#[cfg(not(target_arch = "xtensa"))]
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android")))]
 #[cfg(feature = "candle")]
 pub mod candle_synthesizer;
 
@@ -41,21 +31,13 @@ pub trait Synthesizer: Send + Sync {
 }
 
 pub mod prelude {
-    #[cfg(not(target_arch = "wasm32"))]
-    #[cfg(not(target_arch = "xtensa"))]
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android")))]
     pub use super::openai_synthesizer::*;
-    #[cfg(not(target_arch = "wasm32"))]
-    #[cfg(not(target_arch = "xtensa"))]
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android")))]
     pub use super::play_ht_synthesizer::*;
-    #[cfg(not(target_arch = "wasm32"))]
-    #[cfg(not(target_arch = "xtensa"))]
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android")))]
     pub use super::eleven_labs_synthesizer::*;
-    #[cfg(not(target_arch = "wasm32"))]
-    #[cfg(not(target_arch = "xtensa"))]
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android")))]
     pub use super::azure_synthesizer::*;
     pub use super::*;
 }

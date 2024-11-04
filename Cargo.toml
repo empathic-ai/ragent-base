@@ -66,7 +66,6 @@ tokenizers = { version = "0.19.1", default-features = false, features = ["unstab
 image = { version = "0.25.0", default-features = false, features = ["png"] }
 dyn-clone = "1.0.17"
 ringbuf = "0.4.1"
-# my-workspace-hack = { version = "0.1", path = "../../../my-workspace-hack" }
 
 [target.'cfg(not(target_arch = "xtensa"))'.dependencies]
 reqwest = { version = "0.12.9", default-features = false, features = ["rustls-tls", "json", "stream", "multipart"] }
