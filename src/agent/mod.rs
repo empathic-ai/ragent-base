@@ -19,7 +19,7 @@ use std::sync::{Arc};
 use futures::lock::Mutex;
 use bevy::prelude::*;
 use substring::Substring;
-use empathic_audio::AudioManager;
+use delune::AudioManager;
 use crate::prelude::*;
 use anyhow::Result;
 use nameof::name_of_type;

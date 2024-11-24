@@ -3,7 +3,6 @@ use std::sync::Mutex;
 use super::SpeakBytesEvent;
 use super::UserEventWorker;
 use super::UserEvent;
-use bevy_builder::database::Thing;
 use bytes::Bytes;
 use cpal::traits::DeviceTrait;
 use cpal::traits::HostTrait;
@@ -18,6 +17,7 @@ use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::{UnboundedSender, UnboundedReceiver};
 use bevy::prelude::*;
+use flux::prelude::*;
 use anyhow::Result;
 use std::sync::Arc;
 
@@ -104,8 +104,8 @@ impl MicrophoneWorker {
 				if count > 0 {
 					let data = &processing_buffer[..count];
 					// Perform resampling and format conversion
-					let data = empathic_audio::convert_f32_to_u8(data, 16).unwrap();
-					let data = empathic_audio::resample_pcm(data.to_vec(), sample_rate, 16000, channels as u32, 1, 16, 16).unwrap();
+					let data = delune::convert_f32_to_u8(data, 16).unwrap();
+					let data = delune::resample_pcm(data.to_vec(), sample_rate, 16000, channels as u32, 1, 16, 16).unwrap();
 
 					tx.blocking_send(Bytes::from_iter(data.to_vec())).unwrap();
 				}
@@ -171,16 +171,16 @@ impl MicrophoneWorker {
 					device.build_input_stream(
 						&config.into(),
 						move |data: &[f32], _: &_| {
-							//let data = empathic_audio::separate_channels_f32(data.to_vec(), 2);
+							//let data = delune::separate_channels_f32(data.to_vec(), 2);
 							prod.push_slice(data);
 
 							/*
 							//println!("GOT VOICE DATA, SENDING");
-							let data = empathic_audio::convert_f32_to_u8(data, 16).unwrap();
+							let data = delune::convert_f32_to_u8(data, 16).unwrap();
 							let tx = tx.clone();
 							std::thread::spawn(move || {
 				
-								let data = empathic_audio::resample_pcm(data.to_vec(), sample_rate, 16000, channels as u32, 1, 16, 16).unwrap();
+								let data = delune::resample_pcm(data.to_vec(), sample_rate, 16000, channels as u32, 1, 16, 16).unwrap();
 								//let _user_id = _user_id.clone();
 								//let _space_id = _space_id.clone();
 								//
@@ -194,14 +194,14 @@ impl MicrophoneWorker {
 							#[cfg(not(feature = "wasm32"))]
 							{
 								chunks.extend_from_slice(&data.clone());
-								let duration = empathic_audio::get_duration(chunks.len(), 2, 16000, 16);
+								let duration = delune::get_duration(chunks.len(), 2, 16000, 16);
 								if duration > 5.0 {
-									let data = empathic_audio::resample_pcm(chunks.to_vec(), 16000, 48000, 2, 2, 16, 16).unwrap();
-									let data = empathic_audio::convert_u8_to_f32(&data, 2, 16).unwrap();
-									let data = empathic_audio::convert_f32_to_u8(&data, 2, 16).unwrap();
+									let data = delune::resample_pcm(chunks.to_vec(), 16000, 48000, 2, 2, 16, 16).unwrap();
+									let data = delune::convert_u8_to_f32(&data, 2, 16).unwrap();
+									let data = delune::convert_f32_to_u8(&data, 2, 16).unwrap();
 
 									println!("Output test.wav");
-									let bytes = empathic_audio::samples_to_wav(2, 48000, 16, data.clone());
+									let bytes = delune::samples_to_wav(2, 48000, 16, data.clone());
 									futures::executor::block_on(common::utils::set_bytes("test.wav", bytes.clone()));
 									chunks.clear();
 								}

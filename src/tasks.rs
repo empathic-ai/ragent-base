@@ -14,6 +14,7 @@ use anyhow::Result;
 use anyhow::anyhow;
 use common::prelude::*;
 
+/*
 // Ensure that the trait bound includes `Send + Sync` to be thread safe
 pub trait CloneBoxedFunc: Fn(String, Vec<String>) -> Result<Dynamic> + Send + Sync {}
 
@@ -24,6 +25,7 @@ where
 {
     // We no longer need a custom clone method since Arc will handle it for us
 }
+*/
 
 // Ensure that the trait bound includes `Send + Sync` to be thread safe
 pub trait CloneBoxedCloneFunc: Fn(&Box<dyn Reflect>) -> Box<dyn Reflect> + Send + Sync {}
@@ -93,6 +95,7 @@ impl TaskConfig {
     }
 }
 
+/*
 fn create_task<T>(name: String, args: Vec<String>) -> Result<Dynamic> where T: Task {
     if let TypeInfo::Struct(struct_info) = T::type_info() {
         let mut data = DynamicStruct::default();
@@ -108,6 +111,8 @@ fn create_task<T>(name: String, args: Vec<String>) -> Result<Dynamic> where T: T
     }
     Err(anyhow!("Failed to create task"))
 }
+*/
+
 //impl Default for TaskEvent {
 //    fn default() -> Self {
 //        TaskEvent::Speak(SpeakEvent::default())
@@ -227,124 +232,6 @@ pub struct MusicEventArgs {
     pub genre: String
 }
 */
-#[derive(Debug, TypePath)]
-pub struct Dynamic {
-    pub value: Box<dyn Reflect>,
-    //pub cloned_func: Arc<dyn CloneBoxedCloneFunc>
-}
-
-impl Reflect for Dynamic {
-    fn get_represented_type_info(&self) -> Option<&'static TypeInfo> {
-        self.value.get_represented_type_info()
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self.value.into_any()
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self.value.as_any()
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        self.value.as_any_mut()
-    }
-
-    fn into_reflect(self: Box<Self>) -> Box<dyn Reflect> {
-        self.value.into_reflect()
-    }
-
-    fn as_reflect(&self) -> &dyn Reflect {
-        self.value.as_reflect()
-    }
-
-    fn as_reflect_mut(&mut self) -> &mut dyn Reflect {
-        self.value.as_reflect_mut()
-    }
-
-    fn apply(&mut self, value: &dyn Reflect) {
-        self.value.apply(value)
-    }
-
-    fn set(&mut self, value: Box<dyn Reflect>) -> std::prelude::v1::Result<(), Box<dyn Reflect>> {
-        self.value.set(value)
-    }
-
-    fn reflect_ref(&self) -> ReflectRef {
-        self.value.reflect_ref()
-    }
-
-    fn reflect_mut(&mut self) -> ReflectMut {
-        self.value.reflect_mut()
-    }
-
-    fn reflect_owned(self: Box<Self>) -> bevy::reflect::ReflectOwned {
-        self.value.reflect_owned()
-    }
-
-    fn clone_value(&self) -> Box<dyn Reflect> {
-        self.value.clone_value()
-    }
-    
-    fn try_apply(&mut self, value: &dyn Reflect) -> std::result::Result<(), bevy::reflect::ApplyError> {
-        self.value.try_apply(value)
-    }
-}
-
-impl FromReflect for Dynamic {
-    fn from_reflect(val: &(dyn bevy::prelude::Reflect + 'static)) -> std::option::Option<Self> {
-        Some(Dynamic::from_reflect(val.clone_value()))
-    }
-}
-
-impl Dynamic {
-    pub fn new<T>(value: T) -> Dynamic where T: Reflect + Clone {
-        Dynamic {
-            value: Box::new(value)
-            /* ,
-            cloned_func: Arc::new(|value| {
-                if let Some(val) = value.downcast_ref::<T>() {
-                    return Box::new(val.clone());
-                } else {
-                    panic!("Wrong type!")
-                }
-            })
-            */
-        }
-    }
-    pub fn from_reflect(value: Box<dyn Reflect>) -> Dynamic {
-        Dynamic {
-            value: value
-            /*
-            cloned_func: Arc::new(|value: &Box<dyn Reflect>| {
-                let clone = value as &Clone;
-                clone.clone()
-                //value.clone_into(target)
-            })
-            */
-        }
-    }
-    pub fn cast<T>(self) -> Option<T> where T: Reflect + FromReflect + Typed {
-        dbg!(self.value.reflect_type_path());
-        dbg!(T::type_info().type_path());
-
-        if self.value.reflect_type_path() == T::type_info().type_path() {
-            T::from_reflect(self.value.as_reflect())
-        } else {
-            None
-        }
-    }
-}
-
-impl Clone for Dynamic {
-    fn clone(&self) -> Self {
-        let value = self.value.clone_value();
-        Self {
-            value: value
-            //cloned_func: self.cloned_func.clone()
-        }
-    }
-}
 
 /*
 // Represents an instance of a task, executed by some user

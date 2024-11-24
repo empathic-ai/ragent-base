@@ -6,7 +6,6 @@ use crate::UserEventType;
 
 use super::UserEventWorker;
 use super::UserEvent;
-use bevy_builder::database::Thing;
 use bytes::Bytes;
 use cpal::traits::DeviceTrait;
 use cpal::traits::HostTrait;
@@ -21,6 +20,7 @@ use ringbuf::storage::Heap;
 use ringbuf::wrap::caching::Caching;
 //use tokio::sync::broadcast::{Sender, Receiver};
 use bevy::prelude::*;
+use flux::prelude::*;
 use anyhow::Result;
 use anyhow::anyhow;
 use cpal::StreamConfig;
@@ -117,7 +117,7 @@ impl SpeakerWorker {
 						move |output: &mut [u8], _: &cpal::OutputCallbackInfo| {
 							/*
 							if let Some(data) = try_recv_data(&mut rx) {
-								let data = empathic_audio::resample_pcm(data.to_vec(), 16000, sample_rate, 2, 2, 16, 16).unwrap();
+								let data = delune::resample_pcm(data.to_vec(), 16000, sample_rate, 2, 2, 16, 16).unwrap();
 								write_data(output, 2, data);
 							}
 							 */
@@ -164,8 +164,8 @@ impl SpeakerWorker {
 						loop {
 							if let Some(data) = try_recv_data(_user_id.clone(), &mut rx) {
 								
-								let data = empathic_audio::resample_pcm(data.to_vec(), 16000, sample_rate, 1, channels as u32, 16, 16).unwrap();
-								let data = empathic_audio::convert_u8_to_f32(&data, channels as u32, 16).unwrap();
+								let data = delune::resample_pcm(data.to_vec(), 16000, sample_rate, 1, channels as u32, 16, 16).unwrap();
+								let data = delune::convert_u8_to_f32(&data, channels as u32, 16).unwrap();
 			
 								prod.push_slice(&data);
 
@@ -179,7 +179,7 @@ impl SpeakerWorker {
 								 */
 								
 								//_buffer.lock().unwrap().write_data(data);
-								//let data = empathic_audio::combine_channels(data);
+								//let data = delune::combine_channels(data);
 								//write_data(output, 2, data);
 							}
 							//std::thread::sleep(std::time::Duration::from_millis(10));
@@ -293,7 +293,7 @@ fn write_data(mut output: Vec<u8>, sample_rate: u32, channels: usize, rx: &mut R
 	
 	let data = ev.data;
 	
-	//let data = empathic_audio::separate_channels(data, bit_depth);
+	//let data = delune::separate_channels(data, bit_depth);
 	for frame in output.chunks_mut(channels) {
 		let mut iter = frame.iter_mut();
 		for value in data.iter()  {

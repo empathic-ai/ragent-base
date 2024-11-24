@@ -195,7 +195,7 @@ impl Transcriber for DeepgramTranscriber {
             /*
             let dg = Deepgram::new(env::var("DEEPGRAM_API_KEY").unwrap());
 
-            let receiver = empathic_audio::volume_vad_filter(stream);
+            let receiver = delune::volume_vad_filter(stream);
             while let Some(item) = receiver.recv().await {
                 dg.transcription().prerecorded(deepgram::transcription::prerecorded::audio_source::AudioSource::from_buffer(item), deepgram::transcription::prerecorded::options::OptionsBuilder::new().detect_language(true).language(language))
             }

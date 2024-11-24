@@ -20,7 +20,7 @@ use futures::Stream;
 
 use anyhow::{Result, anyhow};
 use common::prelude::*;
-use empathic_audio::*;
+use delune::*;
 #[cfg(feature = "bevy")]
 use bevy::prelude::*;
 #[cfg(feature = "bevy")]
@@ -713,7 +713,7 @@ impl AgentWorker {
             let clear_buffer = async |buffer: &mut Vec<u8>| {
                 let converter = super::ElevenLabsConverter::new_from_env();
 
-                let wav_data = empathic_audio::samples_to_wav(1, 16000, 16, buffer.to_vec());
+                let wav_data = delune::samples_to_wav(1, 16000, 16, buffer.to_vec());
                 println!("Converting...");
                 let result = converter.convert_voice(voice_id.clone(), wav_data).await?;
                 println!("Converted.");
@@ -734,14 +734,14 @@ impl AgentWorker {
 
                         /*
                         realtime_buffer.append(&mut bytes.to_vec());
-                        let duration = empathic_audio::get_duration(realtime_buffer.len(), 1, 16000, 16);
+                        let duration = delune::get_duration(realtime_buffer.len(), 1, 16000, 16);
                         if duration > 2.0 {
                             clear_buffer(&mut realtime_buffer).await.expect("Failed to clear buffer");
                         }
                         */
                     }
                     RealtimeEvent::AudioEnd => {
-                        //let duration = empathic_audio::get_duration(realtime_buffer.len(), 1, 16000, 16);
+                        //let duration = delune::get_duration(realtime_buffer.len(), 1, 16000, 16);
                         //if duration > 0.5 {
                         //    clear_buffer(&mut realtime_buffer).await.expect("Failed to clear buffer");
                         //}
@@ -822,11 +822,11 @@ impl AgentWorker {
                                 let song_name = args.song_name.replace(" ", "_").to_string();
                                 println!("SINGING SONG: {}", song_name.clone());
         
-                                let mut receiver = empathic_audio::read_wav_chunks(format!("assets/songs/{}_anatra.wav", song_name.clone()), Duration::from_millis(500), 24000, 1).await;
+                                let mut receiver = delune::read_wav_chunks(format!("assets/songs/{}_anatra.wav", song_name.clone()), Duration::from_millis(500), 24000, 1).await;
                 
                                 while let Some(data) = receiver.recv().await {
                 
-                                    let data = empathic_audio::samples_to_wav(1, 24000, 16, data);
+                                    let data = delune::samples_to_wav(1, 24000, 16, data);
                 
                                     _output_tx.send(UserEvent::new(Some(_user_id.clone()), _space_id.clone(), UserEventType::SpeakBytesEvent(SpeakBytesEvent{ data: data }))).unwrap();
                                 }

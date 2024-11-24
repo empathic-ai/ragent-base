@@ -5,11 +5,11 @@ use super::SpeakerWorker;
 use super::UserEventWorker;
 use super::UserEvent;
 use super::VoiceConverter;
-use bevy_builder::database::Thing;
+use bevy::prelude::*;
+use flux::prelude::*;
 use bytes::Bytes;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
-use bevy::prelude::*;
 use anyhow::Result;
 use tokio::task::JoinHandle;
 
@@ -38,16 +38,16 @@ impl ConverterWorker {
 		});
 		*/
 	
-		let mut vad_rx = empathic_audio::streaming::volume_vad_filter(microphone_worker.output_rx);
+		let mut vad_rx = delune::streaming::volume_vad_filter(microphone_worker.output_rx);
 
 		let handle = tokio::spawn(async move {
 			while let Some(data) = vad_rx.recv().await {
 				let converter = super::ElevenLabsConverter::new_from_env();
-				let wav_data = empathic_audio::samples_to_wav(1, 16000, 16, data.to_vec());
+				let wav_data = delune::samples_to_wav(1, 16000, 16, data.to_vec());
 				//common::utils::set_bytes("pocket_test.wav", wav_data.clone()).await;
 				
 				let result = converter.convert_voice("vindicta".to_string(), wav_data).await.unwrap();
-				//let wav_data = empathic_audio::samples_to_wav(1, 24000, 16, result.bytes);
+				//let wav_data = delune::samples_to_wav(1, 24000, 16, result.bytes);
 				//common::utils::set_bytes("pocket_test.wav", wav_data).await;
 				let data = Bytes::from_iter(result.bytes);
 				loopback_speaker_worker.input_tx.send(data.clone()).await;

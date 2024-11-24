@@ -9,20 +9,20 @@ description = "A framework for building LLM agents."
 # crate-type = ["rlib"] #"staticlib", "cdylib", 
 
 [features]
-default = ["bevy", "candle", "dynamic_linking"]
+default = ["bevy", "candle"]
 server = []
 # TODO: Finish non-bevy implementation (or make bevy non-optional)
 # bevy = ["dep:bevy", "ragent_core/bevy", "bevy-trait-query"]
-bevy = ["dep:bevy", "ragent_core/bevy", "common/bevy", "bevy_builder", "bevy-trait-query"]
+bevy = ["dep:bevy", "ragent_core/bevy", "common/bevy", "flux/bevy", "bevy-trait-query"]
 candle = ["candle-core", "candle-nn", "candle-transformers", "hf-hub", "symphonia", "async-stream", "tokenizers"]
 anthropic = ["dep:anthropic"]
-dynamic_linking = ["bevy?/dynamic_linking", "ragent_core/dynamic_linking"]
+dynamic_linking = ["bevy?/dynamic_linking", "flux/dynamic_linking", "ragent_core/dynamic_linking"]
 
 [dependencies]
-bevy_builder = { git = "https://github.com/empathic-ai/bevy-builder.git", optional = true }
+flux = { git = "https://github.com/empathic-ai/flux.git", default-features = false }
 ragent_core = { git = "https://github.com/empathic-ai/ragent-core.git", default-features = false }
 ragent_derive = { git = "https://github.com/empathic-ai/ragent-derive.git", default-features = false }
-empathic_audio = { git = "https://github.com/empathic-ai/empathic-audio.git" }
+delune = { git = "https://github.com/empathic-ai/delune.git" }
 bevy-trait-query = { git = "https://github.com/dead-money/bevy-trait-query.git", branch = "bevy-0.14", optional = true }
 common = { git = "https://github.com/empathic-ai/common.git", default-features = false }
 base64 = "0.21.5"

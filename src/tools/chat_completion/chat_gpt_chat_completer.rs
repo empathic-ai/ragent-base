@@ -15,7 +15,7 @@ use futures::Stream;
 use futures_util::StreamExt;
 use anyhow::{Result, anyhow};
 use common::prelude::*;
-use empathic_audio::*;
+use delune::*;
 
 #[derive(Clone)]
 pub struct ChatGPTChatCompleter {

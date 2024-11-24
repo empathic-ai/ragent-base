@@ -58,7 +58,7 @@ impl ChatGPTRealtime {
 				match ev {
 					RealtimeEvent::Audio(bytes) => {
 						//println!("RECEIVED AUDIO EVENT");
-						let data = empathic_audio::resample_pcm(bytes.to_vec(), 16000, 24000, 1, 1, 16, 16).unwrap();
+						let data = delune::resample_pcm(bytes.to_vec(), 16000, 24000, 1, 1, 16, 16).unwrap();
 
 						let append_audio_message: Message = InputAudioBufferAppend {
 							audio: base64::encode(data),
@@ -103,7 +103,7 @@ impl ChatGPTRealtime {
 						match server_event {
 							ServerEvent::ResponseAudioDelta(ev) => {
 								let bytes = base64::decode(ev.delta).unwrap();
-								let bytes = empathic_audio::resample_pcm(bytes, 24000, 16000, 1, 1, 16, 16).unwrap();
+								let bytes = delune::resample_pcm(bytes, 24000, 16000, 1, 1, 16, 16).unwrap();
 
 								output_tx.send(RealtimeEvent::Audio(Bytes::from(bytes)));
 							}
