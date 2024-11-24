@@ -3,7 +3,7 @@
 //#![feature(async_closure)]
 
 pub mod service {
-    use ragent_core::prelude::*;
+    use crate::prelude::*;
     tonic::include_proto!("ragent");
 }
 
@@ -47,6 +47,9 @@ pub mod tools;
 use ragent_core::prelude::*;
 
 pub mod prelude {
+    pub use ragent_derive::*;
+    pub use ragent_core::prelude::*;
+
     #[cfg(feature = "bevy")]
     pub use crate::agent::*;
     pub use crate::asset_cache::*;
@@ -55,8 +58,6 @@ pub mod prelude {
     #[cfg(feature = "bevy")]
     pub use crate::tasks::*;
 
-    pub use crate::ragent_core::prelude::*;
-    pub use crate::ragent_derive::*;
     #[cfg(feature = "bevy")]
     pub use crate::tools::*;
 
