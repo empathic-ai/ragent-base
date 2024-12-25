@@ -114,7 +114,11 @@ impl Synthesizer for ElevenLabsSynthesizer {
             f.forget();
         }
         */
-        Ok(SynthesisResult { bytes: bytes.to_vec() })
+        Ok(SynthesisResult { bytes: bytes.to_vec(), ..Default::default() })
         //Ok(())
     }
+}
+
+fn calculate_cost(model_name: String, input_tokens: u64, output_tokens: u64, is_cached: bool, use_batch_api: bool) -> Decimal {
+    todo!()
 }

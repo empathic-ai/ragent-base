@@ -527,7 +527,8 @@ impl ChatCompleter for CandleChatCompleter {
                 Ok(x) => {
                     println!("GOT RESPONSE: '{}'", x);
                     Ok(super::ChatCompletionResponse {
-                        completion: x
+                        completion: x,
+                        ..Default::default()
                     })
                 },
                 Err(e) => {

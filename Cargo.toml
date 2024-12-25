@@ -23,11 +23,11 @@ flux = { git = "https://github.com/empathic-ai/flux.git", default-features = fal
 ragent_core = { git = "https://github.com/empathic-ai/ragent-core.git", default-features = false }
 ragent_derive = { git = "https://github.com/empathic-ai/ragent-derive.git", default-features = false }
 delune = { git = "https://github.com/empathic-ai/delune.git" }
-bevy-trait-query = { git = "https://github.com/dead-money/bevy-trait-query.git", branch = "bevy-0.14", optional = true }
+bevy-trait-query = { version = "0.7.0", optional = true }
 common = { git = "https://github.com/empathic-ai/common.git", default-features = false }
-base64 = "0.21.5"
+base64 = "0.22.1"
 serde = { version = "1.0.149", features = ["derive"] }
-serde_json = "1.0.120"
+serde_json = "1.0"
 regex = "1.7.1"
 fancy-regex = "0.11.0"
 substring = "1.4.5"
@@ -44,10 +44,11 @@ lazy_static = "1.4.0"
 async-trait = "0.1.75"
 crossbeam = "0.8.2"
 # tokio-stream = { version = "0.1.15", default-features = false }
-tonic = { git = "https://github.com/Catchawink/tonic.git", branch = "hyper-1.0", default-features = false, features = ["prost", "codegen"] }
+tonic = { version = "0.12.3", default-features = false, features = ["prost", "codegen"] }
+# tonic = { git = "https://github.com/Catchawink/tonic.git", branch = "hyper-1.0", default-features = false, features = ["prost", "codegen"] }
 futures-lite = "2.3.0"
-async-compat = "0.2.3"
-prost = "0.12.1"
+async-compat = "0.2.4"
+prost = { version = "0.13.3" }
 # rodio = "0.17.3"
 tracing-chrome = "0.7.2"
 tracing-subscriber = "0.3.18"
@@ -67,6 +68,9 @@ image = { version = "0.25.0", default-features = false, features = ["png"] }
 dyn-clone = "1.0.17"
 ringbuf = "0.4.1"
 
+rust_decimal = "1.36"
+rust_decimal_macros = "1.36"
+
 [target.'cfg(not(target_arch = "xtensa"))'.dependencies]
 reqwest = { version = "0.12.9", default-features = false, features = ["rustls-tls", "json", "stream", "multipart"] }
 
@@ -76,7 +80,7 @@ deepgram = { git = "https://github.com/empathic-ai/deepgram-rust-sdk.git" }
 anthropic = { git = "https://github.com/AbdelStark/anthropic-rs.git", default-features = false, optional = true }
 tokio-tungstenite = "0.24.0"
 
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+[target.'cfg(all(not(target_arch = "wasm32"), not(target_arch = "xtensa")))'.dependencies]
 openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git", optional = true }
 hf-hub = { git = "https://github.com/Catchawink/hf-hub.git", default-features = false, features = ["rustls-tls", "ureq", "tokio"], optional = true }
 cpal = { version = "0.15.3" }
@@ -86,7 +90,7 @@ hf-hub = { git = "https://github.com/Catchawink/hf-hub.git", default-features = 
 cpal = { version = "0.15.3", features = ["wasm-bindgen"] }
 
 [dependencies.bevy]
-version = "=0.14.0"
+version = "=0.15.0"
 default-features = false
 optional = true
 

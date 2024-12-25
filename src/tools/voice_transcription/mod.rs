@@ -25,6 +25,8 @@ use futures::channel::mpsc;
 
 use async_trait::async_trait;
 use common::prelude::*;
+
+use rust_decimal::prelude::*;
 //use async_channel::{Sender, Receiver};
 
 pub type result<T> = Result<T, Box<dyn Error + Send + Sync>>;
@@ -41,8 +43,9 @@ pub trait Transcriber: Send + Sync {
     async fn transcribe_stream(&mut self, sample_rate: u32, stream: Receiver<Bytes>, token: CancellationToken) -> Result<mpsc::UnboundedReceiver<Result<TranscriptionResponse>>>;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct TranscriptionResponse {
     pub speaker: Option<u32>,
-    pub transcript: String
+    pub transcript: String,
+    pub estimated_cost: Decimal
 }

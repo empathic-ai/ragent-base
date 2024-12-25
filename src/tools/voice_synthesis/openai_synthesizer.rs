@@ -37,6 +37,6 @@ impl Synthesizer for OpenAISynthesizer {
         let voice_name = VOICE_NAME_BY_NAME.get(&voice_name).unwrap();
         let client = OpenAIClient::new(env::var("OPENAI_API_KEY").unwrap().to_string());
         let bytes = client.create_speech(AudioSpeechRequest::new("tts-1-hd".to_string(), voice_name.to_owned(), text, "".to_string())).await?;
-        Ok(SynthesisResult { bytes: bytes.to_vec() })
+        Ok(SynthesisResult { bytes: bytes.to_vec(), ..Default::default() })
     }
 }

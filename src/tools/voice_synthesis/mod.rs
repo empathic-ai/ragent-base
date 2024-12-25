@@ -20,9 +20,12 @@ pub mod candle_synthesizer;
 pub mod coqui_synthesizer;
 
 use async_trait::async_trait;
+use rust_decimal::prelude::*;
 
+#[derive(Default)]
 pub struct SynthesisResult {
-    pub bytes: Vec<u8>
+    pub bytes: Vec<u8>,
+    pub estimated_cost: Decimal
 }
 
 #[async_trait]

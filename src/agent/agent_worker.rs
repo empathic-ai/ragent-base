@@ -523,8 +523,6 @@ impl AgentWorker {
         let task_configs: Vec<TaskConfig> = config.task_configs_by_name.values().map(|x|x.to_owned()).collect();
         let system_prompt = config.description.clone();
 
-        println!("Initializing agent with system prompt:\n\n{}\n\n", system_prompt.clone());
-
         let (input_tx, mut input_rx) = tokio::sync::broadcast::channel::<UserEvent>(512);
         let (output_tx, mut output_rx) = tokio::sync::broadcast::channel::<UserEvent>(512);
 
@@ -686,7 +684,7 @@ impl AgentWorker {
             }
         });
 
-        println!("Initialized agent: {}", agent_name);
+        info!("Initialized agent: {}", agent_name);
 
         //_self.state.lock().await.input_event(UserEvent::new(Thing::new(), space_id.clone(), UserEventType::WaitEvent(WaitEvent {})));
 
@@ -822,7 +820,7 @@ impl AgentWorker {
                                 let song_name = args.song_name.replace(" ", "_").to_string();
                                 println!("SINGING SONG: {}", song_name.clone());
         
-                                let mut receiver = delune::read_wav_chunks(format!("assets/songs/{}_anatra.wav", song_name.clone()), Duration::from_millis(500), 24000, 1).await;
+                                let mut receiver = delune::read_wav_chunks(format!("assets/songs/{}_anatra.wav", song_name.clone()), Duration::from_millis(500), AudioFormat::new(24000, 1, 16)).await;
                 
                                 while let Some(data) = receiver.recv().await {
                 

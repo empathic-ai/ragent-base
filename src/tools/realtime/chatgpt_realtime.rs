@@ -13,6 +13,7 @@ use tokio_tungstenite::tungstenite::protocol::Message;
 //use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use tokio::sync::broadcast::{self, channel, Sender, Receiver};
 use bytes::Bytes;
+use delune::*;
 
 use super::*;
 
@@ -58,10 +59,10 @@ impl ChatGPTRealtime {
 				match ev {
 					RealtimeEvent::Audio(bytes) => {
 						//println!("RECEIVED AUDIO EVENT");
-						let data = delune::resample_pcm(bytes.to_vec(), 16000, 24000, 1, 1, 16, 16).unwrap();
+						let samples = AudioClip::new(AudioFormat::new(16000, 1, 16), bytes.to_vec()).resample(AudioFormat::new(24000, 1, 16)).unwrap().samples;
 
 						let append_audio_message: Message = InputAudioBufferAppend {
-							audio: base64::encode(data),
+							audio: base64::encode(samples),
 							..Default::default()
 						}.into();
 				
@@ -103,7 +104,7 @@ impl ChatGPTRealtime {
 						match server_event {
 							ServerEvent::ResponseAudioDelta(ev) => {
 								let bytes = base64::decode(ev.delta).unwrap();
-								let bytes = delune::resample_pcm(bytes, 24000, 16000, 1, 1, 16, 16).unwrap();
+								let bytes = AudioClip::new(AudioFormat::new(24000, 1, 16), bytes).resample(AudioFormat::new(16000, 1, 16)).unwrap().samples;
 
 								output_tx.send(RealtimeEvent::Audio(Bytes::from(bytes)));
 							}

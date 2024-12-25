@@ -114,7 +114,7 @@ impl UserEventType {
 
                     dynamic_enum.set_represented_type(Some(UserEventType::type_info()));
 
-                    return Ok(UserEventType::from_reflect(dynamic_enum.as_reflect()).unwrap());
+                    return Ok(UserEventType::from_reflect(dynamic_enum.as_partial_reflect()).unwrap());
                 }
             }
         }
@@ -255,7 +255,7 @@ impl UserEvent {
                 if let Some(variant) = enum_ref.field_at(0) {
                     if let ReflectRef::Struct(args) = variant.reflect_ref() {
                         for field in args.iter_fields() {
-                            if let Some(field) = field.downcast_ref::<String>() {
+                            if let Some(field) = field.try_downcast_ref::<String>() {
                                 field_values.push(Some(field.to_owned()));
                             } else {
                                 field_values.push(None);

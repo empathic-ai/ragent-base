@@ -142,7 +142,7 @@ impl Transcriber for DeepgramTranscriber {
                                                     let first_alternative = &channel.alternatives.first().unwrap();
                                                     for word in first_alternative.words.iter() {
                                                         if word.confidence < 0.5 {
-                                                            transcript_responses.push(TranscriptionResponse { speaker: None, transcript: word.word.clone() });
+                                                            transcript_responses.push(TranscriptionResponse { speaker: None, transcript: word.word.clone(), ..Default::default() });
                                                         } else {
                                                             if let Some(mut last) = transcript_responses.last_mut() {
                                                                 if word.speaker == last.speaker {
@@ -150,7 +150,7 @@ impl Transcriber for DeepgramTranscriber {
                                                                     continue;
                                                                 }
                                                             }
-                                                            transcript_responses.push(TranscriptionResponse { speaker: word.speaker.clone(), transcript: word.word.clone() });
+                                                            transcript_responses.push(TranscriptionResponse { speaker: word.speaker.clone(), transcript: word.word.clone(),  ..Default::default() });
                                                         }
                                                     }
                                                     

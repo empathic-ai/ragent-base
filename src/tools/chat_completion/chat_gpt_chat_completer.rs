@@ -16,6 +16,10 @@ use futures_util::StreamExt;
 use anyhow::{Result, anyhow};
 use common::prelude::*;
 use delune::*;
+use rust_decimal::prelude::*;
+use rust_decimal_macros::dec;
+
+type ChatGPTContent = openai_api_rs::v1::chat_completion::Content;
 
 #[derive(Clone)]
 pub struct ChatGPTChatCompleter {
@@ -114,18 +118,24 @@ impl ChatCompleter for ChatGPTChatCompleter {
         let client = OpenAIClient::new(self.api_key.clone());
         let mut stream = client.chat_completion_stream(chat_completion_request.clone()).await.expect("Failed to get chat completion stream.");
         
-        let stream = stream.map(|x| {
+        let model_name = model_name.clone();
+        let stream = stream.map(move |x| {
             match x {
                 Ok(x) => {
+                    let usage = x.usage.unwrap();
+                    let estimated_cost = calculate_cost(model_name.clone(), usage.prompt_tokens, usage.completion_tokens, false, false);
+                    
                     if let Some(delta) = x.choices[0].delta.as_ref() {
                         let completion_response = delta.content.clone().unwrap_or("".to_string());
                         //println!("GOT RESPONSE: {}", completion_response);
                         Ok(super::ChatCompletionResponse {
-                            completion: completion_response
+                            completion: completion_response,
+                            estimated_cost
                         })
                     } else {
                         Ok(super::ChatCompletionResponse {
-                            completion: "".to_string()
+                            completion: "".to_string(),
+                            estimated_cost
                         })
                     }
                 },
@@ -144,4 +154,63 @@ fn is_function_model(mode_name: String) -> bool {
         GPT4_1106_PREVIEW => true,
         _ => false
     }
+}
+
+/// The total cost as a `Decimal`.
+fn calculate_cost(model_name: String, input_tokens: i32, output_tokens: i32, is_cached: bool, use_batch_api: bool) -> Decimal {
+    Default::default()
+    /*
+    // Convert tokens to Decimal and per 1 million tokens
+    let input_tokens_million = Decimal::from(input_tokens) / dec!(1_000_000);
+    let output_tokens_million = Decimal::from(output_tokens) / dec!(1_000_000);
+
+    // Initialize prices
+    let (mut input_price_per_million, mut output_price_per_million) = match model_name {
+        // GPT-4o Models
+        Model::Gpt4o | Model::Gpt4o20241120 | Model::Gpt4o20240806 => (
+            dec!(2.50),  // Input price per 1M tokens
+            dec!(10.00), // Output price per 1M tokens
+        ),
+        Model::Gpt4o20240513 => (
+            dec!(5.00),  // Input price per 1M tokens
+            dec!(15.00), // Output price per 1M tokens
+        ),
+        Model::Gpt4oAudioPreview | Model::Gpt4oAudioPreview20241001 => (
+            (dec!(2.50), dec!(10.00))
+        ),
+            //ChatGPTContent::Text =>
+           
+            //Content::Audio => (dec!(100.00), dec!(200.00)),
+        //},
+        // GPT-4o Mini Models
+        Model::Gpt4oMini | Model::Gpt4oMini20240718 => (
+            dec!(0.150), // Input price per 1M tokens
+            dec!(0.600), // Output price per 1M tokens
+        ),
+        // OpenAI o1 Models
+        Model::O1Preview | Model::O1Preview20240912 => (
+            dec!(15.00), // Input price per 1M tokens
+            dec!(60.00), // Output price per 1M tokens
+        ),
+        Model::O1Mini | Model::O1Mini20240912 => (
+            dec!(3.00),  // Input price per 1M tokens
+            dec!(12.00), // Output price per 1M tokens
+        ),
+    };
+
+    // Apply discounts
+    if is_cached {
+        input_price_per_million /= dec!(2); // 50% discount on cached inputs
+    } else if use_batch_api {
+        input_price_per_million /= dec!(2); // 50% discount on Batch API inputs
+        output_price_per_million /= dec!(2); // 50% discount on Batch API outputs
+    }
+
+    // Calculate costs
+    let input_cost = input_tokens_million * input_price_per_million;
+    let output_cost = output_tokens_million * output_price_per_million;
+
+    // Total cost
+    input_cost + output_cost
+     */
 }

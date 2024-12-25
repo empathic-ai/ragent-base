@@ -118,7 +118,7 @@ impl Synthesizer for PlayHTSynthesizer {
         // NOTE: Conversion of MP3 to WAV and creation of synthesis result is skipped as they are specific to the Python implementation
 
         // Placeholder return; replace with actual logic
-        Ok(SynthesisResult { bytes: bytes.to_vec() })
+        Ok(SynthesisResult { bytes: bytes.to_vec(), ..Default::default() })
     }
 }
 // Note: In Rust, you will also need to decode the MP3 bytes, and handle the synthesis result logic which has been skipped in this translation.

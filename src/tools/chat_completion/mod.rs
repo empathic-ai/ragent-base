@@ -34,6 +34,8 @@ use anyhow::Result;
 
 use dyn_clone::DynClone;
 
+use rust_decimal::prelude::*;
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[allow(non_camel_case_types)]
 pub enum MessageRole {
@@ -98,9 +100,10 @@ pub struct Function {
     pub parameters: Vec<String>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct ChatCompletionResponse {
     pub completion: String,
+    pub estimated_cost: Decimal
 }
 
 #[derive(Debug, Deserialize, Clone)]

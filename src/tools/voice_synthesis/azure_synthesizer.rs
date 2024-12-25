@@ -107,7 +107,7 @@ r#"<!--ID=B7267351-473F-409D-9765-754A8EBCDE05;Version=1|{{"VoiceNameToIdMapItem
         
         let bytes = response.bytes().await?;
     
-        Ok(SynthesisResult { bytes: bytes.to_vec() })
+        Ok(SynthesisResult { bytes: bytes.to_vec(), ..Default::default() })
         /* 
 
         let url = "https://e6fz4wogoa.execute-api.us-east-2.amazonaws.com/default/azure-tts";
