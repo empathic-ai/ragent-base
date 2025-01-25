@@ -115,13 +115,13 @@ impl Transcriber for DeepgramTranscriber {
                             .start()
                             .await;
                         
-                        println!("Sending first voice item!");
+                        //println!("Sending first voice item!");
        
                         if let Err(err) = _forward_tx.send(Ok(item)).await {
                             println!("Error sending initial voice data to transcriber! Wiil try restarting: {}", err);
                             continue;
                         }
-                        println!("Sent first voice item!");
+                        //println!("Sent first voice item!");
 
                         match results {
                             Ok(mut results) => {

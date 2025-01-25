@@ -72,7 +72,7 @@ impl TranscriberWorker {
         tokio::task::spawn(async move {
             //println!("Starting transcriber.");
 
-            let mut transcriber_output_rx = transcriber.transcribe_stream(16000, transcriber_input_rx, _token.clone()).await.expect("Transcription error");
+            let mut transcriber_output_rx = transcriber.transcribe_stream(48000, transcriber_input_rx, _token.clone()).await.expect("Transcription error");
 
             // Using Handle::block_on to run async code in the new thread.
             while let Some(ev) = transcriber_output_rx.next().await {
@@ -83,7 +83,7 @@ impl TranscriberWorker {
     
                 match ev {
                     Ok(ev) => {
-                        //println!("Got transcript result.");
+                        
                         if !ev.transcript.trim_start().trim_end().is_empty() {
                             //println!("Sending transcription result to agent!");
                     
@@ -98,6 +98,8 @@ impl TranscriberWorker {
                             } else {
                                 ev.transcript
                             };
+
+                            info!("Got transcript result: '{}'", text);
                             output_tx.send(UserEvent::new(user_id.clone(), space_id.clone(), UserEventType::SpeakEvent(SpeakEvent { text: text }))).expect("Failed to send speak event");
                         }
                     },
@@ -451,7 +453,7 @@ impl SpaceWorker {
             user_transcribers: Default::default(),
             output_tx: output_tx,
             output_rx: output_rx,
-            use_transcribers: false
+            use_transcribers: true
         }
     }
 
@@ -653,8 +655,11 @@ impl AgentWorker {
                             _state.lock().await.new_message(_space_id.clone(), Role::Agent, Content::Text(user_ev.text.clone()));
                             
                             let bytes = asset.bytes.to_vec();
+                            //let file = delune::samples_to_wav(1, 24000, 16, bytes.clone());
+                            //common::utils::set_bytes("test.wav", file).await;
                             
                             //ev.user_id
+                            info!("Sending speak bytes event.");
                             _output_tx.send(UserEvent::new(ev.user_id, _space_id, UserEventType::SpeakBytesEvent(SpeakBytesEvent { data: bytes }))).unwrap();//.await;
                             //audio_output_tx.send(asset.bytes).await;
 
@@ -755,8 +760,8 @@ impl AgentWorker {
             #[cfg(not(feature="game"))]
             let synthesizer = Arc::new(CoquiSynthesizer::new());
             #[cfg(feature="server")]
-            //let synthesizer = Arc::new(AzureSynthesizer::new_from_env());
-            let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
+            let synthesizer = Arc::new(AzureSynthesizer::new_from_env());
+            //let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
 
             while let Ok(ev) = input_rx.recv().await {
 
@@ -798,6 +803,7 @@ impl AgentWorker {
                             let load_func = async move {
                                 let result = synthesizer.create_speech(emotion, voice_name, _speech_text.clone()).await?;
                     
+                                info!("GOT SPEECH RESULT!");
                                 let bytes = result.bytes.to_vec();
                                 //let bytes = samples_to_wav(1, 24000, 16, bytes);
                                 Ok(crate::asset_cache::Asset::new(bytes))

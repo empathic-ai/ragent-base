@@ -122,8 +122,11 @@ impl ChatCompleter for ChatGPTChatCompleter {
         let stream = stream.map(move |x| {
             match x {
                 Ok(x) => {
-                    let usage = x.usage.unwrap();
-                    let estimated_cost = calculate_cost(model_name.clone(), usage.prompt_tokens, usage.completion_tokens, false, false);
+                    let estimated_cost = if let Some(usage) = x.usage {
+                        calculate_cost(model_name.clone(), usage.prompt_tokens, usage.completion_tokens, false, false)
+                    } else {
+                        Decimal::default()
+                    };
                     
                     if let Some(delta) = x.choices[0].delta.as_ref() {
                         let completion_response = delta.content.clone().unwrap_or("".to_string());

@@ -1,8 +1,9 @@
+use bevy::log::info;
 use reqwest::header::HeaderMap;
 
 use serde::{Deserialize, Serialize};
 use std::{error::Error, env};
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use tokio::sync::Semaphore;
 use super::super::eleven_labs_helpers::VOICE_ID_BY_NAME;
 
@@ -82,40 +83,49 @@ impl Synthesizer for ElevenLabsSynthesizer {
 
         //let context = web_sys::AudioContext::new().unwrap();
 
-        let bytes = response.bytes().await?;
-        /* 
-        let x: &[u8] = &bytes;
-
-        let z = js_sys::Uint8Array::from(x).buffer();
-
-        let p = context.decode_audio_data(&z).unwrap();
-
-        let src = context.create_buffer_source().unwrap();
-        let x = wasm_bindgen_futures::JsFuture::from(p).await.unwrap();
-
-        let audio_buffer: AudioBuffer = x.into();
-        src.set_buffer(Some(&audio_buffer));
-
-        src.connect_with_audio_node(&context.destination());
-
-        unsafe {
-            while is_playing || last_id != voice_order_id - 1 {
-                browser_sleep(100).await;
-            }
-            is_playing = true;
-            last_id = voice_order_id;
-            src.start();
-            let f = Closure::wrap(Box::new(move || {
-                is_playing = false;
-            }) as Box<dyn FnMut()>);
-
-            src.set_onended(Some(f.as_ref().unchecked_ref()));
-
-            f.forget();
+        if response.status() == reqwest::StatusCode::OK {
+                let bytes = response.bytes().await?;
+                /* 
+                let x: &[u8] = &bytes;
+        
+                let z = js_sys::Uint8Array::from(x).buffer();
+        
+                let p = context.decode_audio_data(&z).unwrap();
+        
+                let src = context.create_buffer_source().unwrap();
+                let x = wasm_bindgen_futures::JsFuture::from(p).await.unwrap();
+        
+                let audio_buffer: AudioBuffer = x.into();
+                src.set_buffer(Some(&audio_buffer));
+        
+                src.connect_with_audio_node(&context.destination());
+        
+                unsafe {
+                    while is_playing || last_id != voice_order_id - 1 {
+                        browser_sleep(100).await;
+                    }
+                    is_playing = true;
+                    last_id = voice_order_id;
+                    src.start();
+                    let f = Closure::wrap(Box::new(move || {
+                        is_playing = false;
+                    }) as Box<dyn FnMut()>);
+        
+                    src.set_onended(Some(f.as_ref().unchecked_ref()));
+        
+                    f.forget();
+                }
+                */
+                Ok(SynthesisResult { bytes: bytes.to_vec(), ..Default::default() })
+                //Ok(())
+        } else {
+            info!("Error: {}", response.status().to_string());
+            info!("Text: {}", response.text().await.unwrap());
+            
+            //info!("Response: {}", response.text().await.unwrap());
+            //dbg!(err);
+            Err(anyhow!("Error synthesizing speech!"))
         }
-        */
-        Ok(SynthesisResult { bytes: bytes.to_vec(), ..Default::default() })
-        //Ok(())
     }
 }
 

@@ -4,13 +4,17 @@
 
 pub mod service {
     use crate::prelude::*;
-    tonic::include_proto!("ragent");
+    include!(concat!(env!("OUT_DIR"), concat!("\\", "ragent.rs")));
+    //tonic::include_proto!("ragent");
 }
 
 use std::any::Any;
 
 pub use crate::service::user_event::UserEventType;
 pub use crate::service::UserEvent;
+
+#[cfg(feature = "tokio")]
+pub mod asset_cache;
 
 #[cfg(feature = "bevy")]
 use bevy::prelude::*;
@@ -36,7 +40,6 @@ use anyhow::{anyhow, Result};
 
 #[cfg(feature = "bevy")]
 pub mod agent;
-pub mod asset_cache;
 #[cfg(feature = "bevy")]
 pub mod config;
 #[cfg(feature = "bevy")]
@@ -50,14 +53,15 @@ pub mod prelude {
     pub use ragent_derive::*;
     pub use ragent_core::prelude::*;
 
+    #[cfg(feature = "tokio")]
+    pub use crate::asset_cache::*;
+
     #[cfg(feature = "bevy")]
     pub use crate::agent::*;
-    pub use crate::asset_cache::*;
     #[cfg(feature = "bevy")]
     pub use crate::config::*;
     #[cfg(feature = "bevy")]
     pub use crate::tasks::*;
-
     #[cfg(feature = "bevy")]
     pub use crate::tools::*;
 

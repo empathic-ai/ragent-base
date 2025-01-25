@@ -92,7 +92,8 @@ r#"<!--ID=B7267351-473F-409D-9765-754A8EBCDE05;Version=1|{{"VoiceNameToIdMapItem
     
         let mut headers = HeaderMap::new();
     
-        headers.insert("X-Microsoft-OutputFormat", HeaderValue::from_static("raw-16khz-16bit-mono-pcm"));
+        // raw-16khz-16bit-mono-pcm
+        headers.insert("X-Microsoft-OutputFormat", HeaderValue::from_static("raw-48khz-16bit-mono-pcm"));
         headers.insert("content-type", HeaderValue::from_static("application/ssml+xml"));
         headers.insert("Authorization", HeaderValue::from_str(&authorization)?);
         headers.insert("user-agent", HeaderValue::from_static("Meridian"));

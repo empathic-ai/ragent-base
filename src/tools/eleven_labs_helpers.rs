@@ -12,6 +12,7 @@ lazy_static! {
         map.insert("rough-man".to_string(), "N2lVS1w4EtoT3dr4eOWO".to_string());
         map.insert("kind-girl-a".to_string(), "pN7g4tQyXKBDawJSw7Q8".to_string());
         map.insert("kind-girl-b".to_string(), "W2wCwtpOQyVoOrSZKSpo".to_string());
+        map.insert("kind-girl-c".to_string(), "iFopH5Sj5U661cTDpjop".to_string());
         map.insert("soft-man".to_string(), "MuoHnmlnSXfhGXY2o3im".to_string());
         map.insert("old-woman".to_string(), "GamzzeOsatMbpvYvKdVx".to_string());
         map.insert("deep-man".to_string(), "5rnzAtDpoJXVGo8Td3mO".to_string());
