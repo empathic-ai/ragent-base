@@ -11,7 +11,7 @@ pub use chatgpt_realtime::*;
 #[derive(Clone)]
 pub enum RealtimeEvent {
 	Text(String),
-	Audio(Bytes),
+	Audio(Vec<i16>),
 	AudioEnd
 }
 

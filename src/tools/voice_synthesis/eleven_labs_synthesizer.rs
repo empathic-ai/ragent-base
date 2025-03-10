@@ -19,9 +19,19 @@ pub struct ElevenLabsSynthesizer {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct VoiceSettings {
+    pub stability: f32,
+    // Range from 0.0-1.0
+    pub similarity_boost: f32,
+    // Range from 0.0-1.0
+    pub style: f32
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VoiceStreamRequest {
     pub text: String,
     pub model_id: String,
+    pub voice_settings: VoiceSettings
     // For information on ElevenLabs concurrent requests limit, see: https://help.elevenlabs.io/hc/en-us/articles/14312733311761-How-many-requests-can-I-make-and-can-I-increase-it-
     // Currently defaults to 5 (Creator tier)
     //pub optimize_streaming_latency: u32
@@ -30,9 +40,9 @@ pub struct VoiceStreamRequest {
 impl ElevenLabsSynthesizer {
 
     // mp3_44100_128
-    // for esp32 -- format = pcm_24000
+    // for esp32 -- format = pcm_16000, pcm_24000
     pub fn new_from_env() -> Self {
-        Self { api_key: env::var("ELEVEN_LABS_KEY").unwrap(), format: "pcm_24000".to_string(), semaphore: Semaphore::new(5) }
+        Self { api_key: env::var("ELEVEN_LABS_KEY").unwrap(), format: "pcm_16000".to_string(), semaphore: Semaphore::new(5) }
     }
 }
 
@@ -67,12 +77,21 @@ impl Synthesizer for ElevenLabsSynthesizer {
         //    }
         //}
 
-        // Model options: eleven_multilingual_v2, eleven_turbo_v2
+        // Model options: eleven_multilingual_v2, eleven_turbo_v2, eleven_flash_v2_5
+        // See: https://elevenlabs.io/docs/models
         let response = client
             .post(
                 format!("https://api.elevenlabs.io/v1/text-to-speech/{}/stream?output_format={}", voice_id, self.format)
             )
-            .json(&VoiceStreamRequest { text: text.clone(), model_id: "eleven_turbo_v2".to_string() })
+            .json(&VoiceStreamRequest {
+                text:text.clone(),
+                model_id: "eleven_flash_v2_5".to_string(),
+                voice_settings: VoiceSettings {
+                    stability: 0.5,
+                    similarity_boost: 1.0,
+                    style: 1.0
+                }
+            })
             //.json(&format!("{{\"voicemodel_uuid\": \"{voice_uuid}\", \"pace\": {pace}, \"speech\": \"{speech}\"}}"))
             //.header("Authorization", format!("Bearer {}", self.access_token))
             .headers(headers)

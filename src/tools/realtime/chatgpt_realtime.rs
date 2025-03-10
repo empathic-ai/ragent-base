@@ -57,12 +57,12 @@ impl ChatGPTRealtime {
 			while let Ok(ev) = &mut input_rx.recv().await {
 
 				match ev {
-					RealtimeEvent::Audio(bytes) => {
+					RealtimeEvent::Audio(samples) => {
 						//println!("RECEIVED AUDIO EVENT");
-						let samples = AudioClip::new(AudioFormat::new(16000, 1, 16), bytes.to_vec()).resample(AudioFormat::new(24000, 1, 16)).unwrap().samples;
+						let mut samples = AudioClip::new(AudioFormat::new(16000, 1, 16), samples.clone()).resample(AudioFormat::new(24000, 1, 16)).unwrap().samples;
 
 						let append_audio_message: Message = InputAudioBufferAppend {
-							audio: base64::encode(samples),
+							audio: base64::encode(convert_i16_to_16_bit_u8(samples.as_mut())),
 							..Default::default()
 						}.into();
 				
@@ -104,9 +104,9 @@ impl ChatGPTRealtime {
 						match server_event {
 							ServerEvent::ResponseAudioDelta(ev) => {
 								let bytes = base64::decode(ev.delta).unwrap();
-								let bytes = AudioClip::new(AudioFormat::new(24000, 1, 16), bytes).resample(AudioFormat::new(16000, 1, 16)).unwrap().samples;
+								let samples = AudioClip::new(AudioFormat::new(24000, 1, 16), convert_16_bit_u8_to_i16(&bytes)).resample(AudioFormat::new(16000, 1, 16)).unwrap().samples;
 
-								output_tx.send(RealtimeEvent::Audio(Bytes::from(bytes)));
+								output_tx.send(RealtimeEvent::Audio(samples));
 							}
 							ServerEvent::ResponseOutputItemDone(ev) => {
 								//eprintln!();

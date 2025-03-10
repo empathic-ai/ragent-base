@@ -21,7 +21,7 @@ lazy_static! {
         // Old smexy frog voice, more gritty
         map.insert("man-a".to_string(), "N2lVS1w4EtoT3dr4eOWO".to_string());
         // Anatra voice
-        map.insert("child-a".to_string(),"gkvpzrzujkR7osK9HAgg".to_string());
+        map.insert("child-a".to_string(),"DlTtPjEzDHeTmWiWPJmP".to_string());
         // Baby chick voice
         map.insert("child-b".to_string(), "Z8aiHDBl5U16BuihS7ss".to_string());
         // Bearsworth voice

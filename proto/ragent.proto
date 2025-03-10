@@ -97,6 +97,7 @@ message UserEvent {
 // This is a placeholder comment.
 message SpeakBytesEvent {
   bytes data = 1;
+  optional string text = 2;
 }
 
 /// Speaks text using the provided voice name and emotion. The text may be a single sentence or multiple sentences.

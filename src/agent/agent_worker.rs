@@ -72,7 +72,7 @@ impl TranscriberWorker {
         tokio::task::spawn(async move {
             //println!("Starting transcriber.");
 
-            let mut transcriber_output_rx = transcriber.transcribe_stream(48000, transcriber_input_rx, _token.clone()).await.expect("Transcription error");
+            let mut transcriber_output_rx = transcriber.transcribe_stream(16000, transcriber_input_rx, _token.clone()).await.expect("Transcription error");
 
             // Using Handle::block_on to run async code in the new thread.
             while let Some(ev) = transcriber_output_rx.next().await {
@@ -99,7 +99,7 @@ impl TranscriberWorker {
                                 ev.transcript
                             };
 
-                            info!("Got transcript result: '{}'", text);
+                            info!("Got transcript result for user ({}): '{}'", user_id.clone().unwrap_or_default(), text);
                             output_tx.send(UserEvent::new(user_id.clone(), space_id.clone(), UserEventType::SpeakEvent(SpeakEvent { text: text }))).expect("Failed to send speak event");
                         }
                     },
@@ -660,7 +660,7 @@ impl AgentWorker {
                             
                             //ev.user_id
                             info!("Sending speak bytes event.");
-                            _output_tx.send(UserEvent::new(ev.user_id, _space_id, UserEventType::SpeakBytesEvent(SpeakBytesEvent { data: bytes }))).unwrap();//.await;
+                            _output_tx.send(UserEvent::new(ev.user_id, _space_id, UserEventType::SpeakBytesEvent(SpeakBytesEvent { data: bytes, text: Some(user_ev.text) }))).unwrap();//.await;
                             //audio_output_tx.send(asset.bytes).await;
 
                             //let _state = _state.clone();
@@ -732,8 +732,8 @@ impl AgentWorker {
                     RealtimeEvent::Text(text) => {
 
                     }
-                    RealtimeEvent::Audio(bytes) => {
-                        output_tx.send(UserEvent::new(Some(user_id.clone()), primary_space_id.clone(), UserEventType::SpeakBytesEvent(SpeakBytesEvent { data: bytes.to_vec() }))).unwrap();
+                    RealtimeEvent::Audio(mut bytes) => {
+                        output_tx.send(UserEvent::new(Some(user_id.clone()), primary_space_id.clone(), UserEventType::SpeakBytesEvent(SpeakBytesEvent { data: convert_i16_to_16_bit_u8(bytes.as_mut()).to_vec(), text: None }))).unwrap();
 
                         /*
                         realtime_buffer.append(&mut bytes.to_vec());
@@ -760,8 +760,8 @@ impl AgentWorker {
             #[cfg(not(feature="game"))]
             let synthesizer = Arc::new(CoquiSynthesizer::new());
             #[cfg(feature="server")]
-            let synthesizer = Arc::new(AzureSynthesizer::new_from_env());
-            //let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
+            //let synthesizer = Arc::new(AzureSynthesizer::new_from_env());
+            let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
 
             while let Ok(ev) = input_rx.recv().await {
 
@@ -789,7 +789,7 @@ impl AgentWorker {
                             //state.lock().await.new_message(_space_id.clone(), Role::Agent, Content::Text(args.text.clone()));
                             output_tx.send(ev.clone());
                     
-                            log(format!("[{}] Processing self event: {}", name, ev_description));
+                            //log(format!("[{}] Processing self event: {}", name, ev_description));
 
                             //println!("Processing speak event: {}", args.text.clone());
                             //let voice_name = "smexy-frog".to_string();
@@ -803,7 +803,7 @@ impl AgentWorker {
                             let load_func = async move {
                                 let result = synthesizer.create_speech(emotion, voice_name, _speech_text.clone()).await?;
                     
-                                info!("GOT SPEECH RESULT!");
+                                //info!("GOT SPEECH RESULT!");
                                 let bytes = result.bytes.to_vec();
                                 //let bytes = samples_to_wav(1, 24000, 16, bytes);
                                 Ok(crate::asset_cache::Asset::new(bytes))
@@ -826,13 +826,13 @@ impl AgentWorker {
                                 let song_name = args.song_name.replace(" ", "_").to_string();
                                 println!("SINGING SONG: {}", song_name.clone());
         
-                                let mut receiver = delune::read_wav_chunks(format!("assets/songs/{}_anatra.wav", song_name.clone()), Duration::from_millis(500), AudioFormat::new(24000, 1, 16)).await;
+                                let mut receiver = delune::read_wav_chunks(format!("assets/songs/{}_anatra.wav", song_name.clone()), Duration::from_millis(500), AudioFormat::new(16000, 1, 16)).await;
                 
-                                while let Some(data) = receiver.recv().await {
+                                while let Some(mut data) = receiver.recv().await {
                 
-                                    let data = delune::samples_to_wav(1, 24000, 16, data);
+                                    let data = convert_i16_to_16_bit_u8(data.as_mut()).to_vec();
                 
-                                    _output_tx.send(UserEvent::new(Some(_user_id.clone()), _space_id.clone(), UserEventType::SpeakBytesEvent(SpeakBytesEvent{ data: data }))).unwrap();
+                                    _output_tx.send(UserEvent::new(Some(_user_id.clone()), _space_id.clone(), UserEventType::SpeakBytesEvent(SpeakBytesEvent{ data: data, text: None }))).unwrap();
                                 }
                                 println!("Done playing song.");
                             });
@@ -884,7 +884,7 @@ impl AgentState {
 
         if let Some(api) = &mut self.realtime_api {
             if let Some(UserEventType::SpeakBytesEvent(args)) = ev.user_event_type {
-                api.send(RealtimeEvent::Audio(Bytes::from(args.data))).await;
+                api.send(RealtimeEvent::Audio(convert_16_bit_u8_to_i16(args.data.as_ref()))).await;
             }
         } else {
             let mut is_image = false;
@@ -926,7 +926,7 @@ impl AgentState {
             //    println!("{:?}: {}", message.role.unwrap(), message.content.unwrap());
             //}
             
-            log(format!("[{}] Processing other ({}) event: {}", self.config.name, ev_user_id.clone().unwrap_or(Thing::from("None")), ev_description));
+            log(format!("[{}] Processing event of other user ({}): {}", self.config.name, ev_user_id.clone().unwrap_or(Thing::from("None")), ev_description));
 
             //let (sx, rx) = async_channel::unbounded::<Pin<Box<dyn Future<Output = ()>>>>();
 

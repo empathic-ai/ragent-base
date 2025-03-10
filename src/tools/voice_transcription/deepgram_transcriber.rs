@@ -111,7 +111,7 @@ impl Transcriber for DeepgramTranscriber {
                             // TODO Specific to my machine, not general enough example.
                             .sample_rate(sample_rate)//44100)
                             // TODO Specific to my machine, not general enough example.
-                            .channels(2)
+                            .channels(1)
                             .start()
                             .await;
                         
