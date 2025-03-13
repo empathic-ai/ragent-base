@@ -17,9 +17,10 @@ bevy = ["dep:bevy", "ragent_core/bevy", "common/bevy", "flux/bevy", "bevy-trait-
 candle = ["candle-core", "candle-nn", "candle-transformers", "hf-hub", "symphonia", "async-stream", "tokenizers"]
 anthropic = ["dep:anthropic"]
 dynamic_linking = ["bevy?/dynamic_linking", "flux/dynamic_linking", "ragent_core/dynamic_linking"]
-tonic = ["dep:tonic"]
+tonic = ["dep:tonic", "prost"]
 tokio = ["dep:tokio", "tokio-tungstenite"]
 futures = ["dep:futures", "futures-util", "futures-lite"]
+prost = ["dep:prost"]
 
 [dependencies]
 # TODO: Replace with crates.io reference once Tonic officially supports Axum v0.8
@@ -34,7 +35,7 @@ candle-nn = { git = "https://github.com/huggingface/candle.git", tag = "0.8.0", 
 candle-transformers = { git = "https://github.com/huggingface/candle.git", tag = "0.8.0", optional = true }
 async-stream = { version = "0.3.5", optional = true }
 tokenizers = { version = "0.19.1", default-features = false, features = ["unstable_wasm"], optional = true }
-prost = { version = "0.13.3" }
+prost = { version = "0.13.3", optional = true }
 documented = "0.1.2"
 
 # Removed feature due to web compatibility issues: "jpeg"
