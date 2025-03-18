@@ -27,6 +27,7 @@ where
 }
 */
 
+/*
 // Ensure that the trait bound includes `Send + Sync` to be thread safe
 pub trait CloneBoxedCloneFunc: Fn(&Box<dyn Reflect>) -> Box<dyn Reflect> + Send + Sync {}
 
@@ -37,12 +38,12 @@ where
 {
     // We no longer need a custom clone method since Arc will handle it for us
 }
-
-pub trait CreateTaskFunc: Fn(Vec<String>) -> Result<UserEventType> + Send + Sync {}
+*/
+pub trait CreateTaskFunc: Fn(Vec<String>) -> Result<DynamicStruct> + Send + Sync {}
 // We implement this trait for any function that matches the signature and is 'static, Clone, Send, and Sync
 impl<T> CreateTaskFunc for T
 where
-    T: 'static + Fn(Vec<String>) -> Result<UserEventType> + Clone + Send + Sync,
+    T: 'static + Fn(Vec<String>) -> Result<DynamicStruct> + Clone + Send + Sync,
 {
     // We no longer need a custom clone method since Arc will handle it for us
 }
@@ -87,16 +88,16 @@ impl TaskConfig {
             description: docs.to_string(),
             parameters: parameters,
             create_task: Arc::new(|args: Vec<String>| {
-                UserEventType::from::<T>(args)
-                //create_task::<T>(name, args)
+                //UserEventType::from::<T>(args)
+                create_task::<T>(args)
             }),
             is_available
         }
     }
 }
 
-/*
-fn create_task<T>(name: String, args: Vec<String>) -> Result<Dynamic> where T: Task {
+
+fn create_task<T>(args: Vec<String>) -> Result<DynamicStruct> where T: Task {
     if let TypeInfo::Struct(struct_info) = T::type_info() {
         let mut data = DynamicStruct::default();
         for i in 0..args.len() {
@@ -106,12 +107,11 @@ fn create_task<T>(name: String, args: Vec<String>) -> Result<Dynamic> where T: T
         data.set_represented_type(Some(T::type_info()));
         //let task = data.clone_value();
         //T::take_from_reflect(reflect)
-        let task = T::from_reflect(&data).unwrap();
-        return Ok(Dynamic::new(task));
+        //let task = T::from_reflect(&data).unwrap();
+        return Ok(data);
     }
     Err(anyhow!("Failed to create task"))
 }
-*/
 
 //impl Default for TaskEvent {
 //    fn default() -> Self {
@@ -124,6 +124,7 @@ pub fn get_event_name_from_type<T>() -> String where T: Task {
     get_event_name_from_type_name(type_name)
 }
 
+/* 
 pub fn get_event_name(event_type: UserEventType) -> String {
     if let ReflectRef::Enum(enum_ref) = event_type.as_reflect().reflect_ref() {
         let s = enum_ref.field_at(0).unwrap();
@@ -131,7 +132,7 @@ pub fn get_event_name(event_type: UserEventType) -> String {
     } else {
         panic!("Failed to find event name from instance of event type!");
     }
-}
+}*/
 
 pub fn get_event_name_from_type_name(type_name: &str) -> String {
     let mut name = type_name.to_string();//.to_lowercase();

@@ -2,15 +2,18 @@
 #![allow(unused)]
 //#![feature(async_closure)]
 
+#[cfg(feature = "tonic")]
 pub mod service {
     use crate::prelude::*;
-    include!(concat!(env!("OUT_DIR"), concat!("\\", "ragent.rs")));
-    //tonic::include_proto!("ragent");
+    //include!(concat!(env!("OUT_DIR"), concat!("\\", "ragent.rs")));
+    tonic::include_proto!("ragent");
 }
 
 use std::any::Any;
 
+#[cfg(feature = "tonic")]
 pub use crate::service::user_event::UserEventType;
+#[cfg(feature = "tonic")]
 pub use crate::service::UserEvent;
 
 #[cfg(feature = "tokio")]
@@ -30,8 +33,12 @@ use bevy::reflect::{
 
 #[cfg(feature = "bevy")]
 pub use flux::prelude::Thing;
-#[cfg(feature = "bevy")]
-use prelude::{get_event_name_from_type, get_event_name_from_type_name, SpeakEvent};
+
+mod types;
+use types::*;
+
+//#[cfg(feature = "bevy")]
+//use prelude::{get_event_name_from_type, get_event_name_from_type_name, SpeakEvent};
 pub use ragent_core;
 pub use ragent_derive;
 use serde::{Deserialize, Serialize};
@@ -64,21 +71,21 @@ pub mod prelude {
     pub use crate::tasks::*;
     #[cfg(feature = "bevy")]
     pub use crate::tools::*;
-
-    pub use crate::service::*;
-    pub use crate::UserEvent;
-    pub use crate::UserEventType;
+    pub use crate::types::*;
     #[cfg(feature = "bevy")]
     pub use flux::prelude::Thing;
+    #[cfg(feature = "tonic")]
+    pub use crate::service::*;
 }
 
+/*
 #[cfg(feature = "bevy")]
 impl UserEventType {
     pub fn from<T>(event_args: Vec<String>) -> Result<UserEventType>
     where
         T: Task + Typed,
     {
-        let event_name = get_event_name_from_type::<T>();
+        let event_name = crate::prelude::get_event_name_from_type::<T>();
 
         //for event_arg in event_args.iter() {
         //println!("Event arg: {}", event_arg);
@@ -88,7 +95,7 @@ impl UserEventType {
             let variant_name = *enum_info
                 .variant_names()
                 .iter()
-                .find(|x| get_event_name_from_type_name(x) == event_name)
+                .find(|x| crate::prelude::get_event_name_from_type_name(x) == event_name)
                 .unwrap();
             //println!("Variant name: {}", variant_name);
 
@@ -207,38 +214,41 @@ impl UserEventType {
     }
     */
 }
+*/
 
 #[cfg(feature = "bevy")]
 impl UserEvent {
-    pub fn new(user_id: Option<Thing>, space_id: Thing, ev: UserEventType) -> Self {
+    pub fn new(user_id: Thing, space_id: Thing, ev: DynamicStruct) -> Self {
         UserEvent {
-            user_id: user_id,
-            space_id: Some(space_id),
+            user_id: Some(user_id),
+            space_id: space_id,
             context_id: None,
-            user_event_type: Some(ev),
+            ev: ev,
         }
     }
 
     pub fn new_with_context(
-        user_id: Option<Thing>,
+        user_id: Thing,
         space_id: Thing,
         context_id: Thing,
-        ev: UserEventType,
+        ev: DynamicStruct,
     ) -> Self {
         UserEvent {
-            user_id: user_id,
-            space_id: Some(space_id),
+            user_id: Some(user_id),
+            space_id: space_id,
             context_id: Some(context_id),
-            user_event_type: Some(ev),
+            ev: ev,
         }
     }
 
-    pub fn get_event_name(&self) -> Result<String> {
-        if let Some(event_type) = self.user_event_type.as_ref() {
+    pub fn get_event_name(&self) -> String {
+        crate::prelude::get_event_name_from_type_name(self.ev.reflect_short_type_path())
+        /*
+        if let Some(event_type) = self.ev.as_ref() {
             if let ReflectRef::Enum(enum_ref) = event_type.as_reflect().reflect_ref() {
                 if let TypeInfo::Enum(enum_info) = UserEventType::type_info() {
                     if let Some(variant_info) = enum_info.variant_at(enum_ref.variant_index()) {
-                        let variant_name = get_event_name_from_type_name(variant_info.name());
+                        let variant_name = crate::prelude::get_event_name_from_type_name(variant_info.name());
                         return Ok(variant_name.to_string());
                     }
                 }
@@ -246,37 +256,38 @@ impl UserEvent {
             return Err(anyhow!("Failed to get event type name!"));
         }
         Err(anyhow!("Failed to get event type from user event!"))
+         */
     }
 
     pub fn get_event_description(&self) -> Result<String> {
-        let ev_name = self.get_event_name()?;
+        let ev_name = self.get_event_name();
 
         let mut field_values = Vec::<Option<String>>::new();
 
         // This closely resembles Self.get_event_name(), since we're getting a variant struct type
-        if let Some(event_type) = self.user_event_type.as_ref() {
-            if let ReflectRef::Enum(enum_ref) = event_type.as_reflect().reflect_ref() {
-                if let Some(variant) = enum_ref.field_at(0) {
-                    if let ReflectRef::Struct(args) = variant.reflect_ref() {
-                        for field in args.iter_fields() {
-                            if let Some(field) = field.try_downcast_ref::<String>() {
-                                field_values.push(Some(field.to_owned()));
-                            } else {
-                                field_values.push(None);
-                            }
-                        }
-                    }
+        //if let Some(event_type) = self.ev.as_ref() {
+        for field in self.ev.iter_fields() {//.reflect_ref() {
+            //if let Some(variant) = enum_ref.field_at(0) {
+                //if let ReflectRef::Struct(args) = variant.reflect_ref() {
+            //for field in args.iter_fields() {
+                if let Some(field) = field.try_downcast_ref::<String>() {
+                    field_values.push(Some(field.to_owned()));
+                } else {
+                    field_values.push(None);
                 }
-            }
-
-            let args_description: String = field_values
-                .iter()
-                .map(|s| format!(r#""{}""#, s.clone().unwrap_or("".to_string())))
-                .collect::<Vec<_>>()
-                .join(", ");
-
-            return Ok(format!("{ev_name}({args_description})"));
+            //}
+                //}
+            //}
         }
-        Err(anyhow!("Failed to get event type from user event!"))
+
+        let args_description: String = field_values
+            .iter()
+            .map(|s| format!(r#""{}""#, s.clone().unwrap_or("".to_string())))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        return Ok(format!("{ev_name}({args_description})"));
+        //}
+        //Err(anyhow!("Failed to get event type from user event!"))
     }
 }

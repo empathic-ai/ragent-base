@@ -30,6 +30,7 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use substring::Substring;
 use fancy_regex::Regex;
+use bevy::reflect::FromReflect;
 
 //use rodio::{Decoder, OutputStream, source::Source};
 
@@ -100,7 +101,7 @@ impl TranscriberWorker {
                             };
 
                             info!("Got transcript result for user ({}): '{}'", user_id.clone().unwrap_or_default(), text);
-                            output_tx.send(UserEvent::new(user_id.clone(), space_id.clone(), UserEventType::SpeakEvent(SpeakEvent { text: text }))).expect("Failed to send speak event");
+                            output_tx.send(UserEvent::new(user_id.clone().unwrap(), space_id.clone(), SpeakEvent { text: text }.clone_dynamic())).expect("Failed to send speak event");
                         }
                     },
                     Err(err) => {
@@ -317,7 +318,7 @@ impl ChatCompletionResponseWorker {
         if let Some(task_config) = self.config.task_configs_by_name.get(&name) {
             let event_type = (task_config.create_task)(arguments)?;
 
-            let ev = UserEvent::new_with_context(Some(self.user_id.clone()), self.space_id.clone(), self.context_id.clone(), event_type);
+            let ev = UserEvent::new_with_context(self.user_id.clone(), self.space_id.clone(), self.context_id.clone(), event_type);
             log(format!("[{}] Generated response: {}", self.config.name, args_description));
 
             self.output_tx.send(ev.clone())?;
@@ -457,25 +458,20 @@ impl SpaceWorker {
         }
     }
 
-    pub fn send_event(&mut self, ev: UserEvent) -> Result<()> {
+    pub fn send_event(&mut self, user_ev: UserEvent) -> Result<()> {
         if self.use_transcribers {
-            match ev.user_event_type.clone().unwrap() {
-                UserEventType::SpeakBytesEvent(speak_bytes_ev) => {
-                    if let Some(user_id) = ev.user_id.clone() {
-                        //println!("Got user speak bytes, sending to transcriber.");
-                        let transcriber = match self.user_transcribers.entry(user_id.clone()) {
-                            Entry::Occupied(o) => o.into_mut(),
-                            Entry::Vacant(v) => {
-                                v.insert(bevy::tasks::block_on(Compat::new(TranscriberWorker::new(self.space_id.clone(), Some(user_id), self.output_tx.clone()))))
-                            },
-                        };
-                        transcriber.send(speak_bytes_ev.data)?;
-                    } else {
-                        self.space_transcriber.send(speak_bytes_ev.data)?;
-                    }
-                },
-                _ => {
-    
+            if let Some(ev) = SpeakBytesEvent::from_reflect(&user_ev.ev) {
+                if let Some(user_id) = user_ev.user_id.clone() {
+                    //println!("Got user speak bytes, sending to transcriber.");
+                    let transcriber = match self.user_transcribers.entry(user_id.clone()) {
+                        Entry::Occupied(o) => o.into_mut(),
+                        Entry::Vacant(v) => {
+                            v.insert(bevy::tasks::block_on(Compat::new(TranscriberWorker::new(self.space_id.clone(), Some(user_id), self.output_tx.clone()))))
+                        },
+                    };
+                    transcriber.send(ev.data)?;
+                } else {
+                    self.space_transcriber.send(ev.data)?;
                 }
             }
         }
@@ -630,29 +626,29 @@ impl AgentWorker {
         //let _space_id = space_id.clone();
         // TODO: Rework with new Bevy implementation
         tokio::task::spawn(async move {
-            while let Ok(ev) = voice_rx.recv().await {
+            while let Ok(user_ev) = voice_rx.recv().await {
 
                 if _agent_token.is_cancelled() {
                     continue;
                 }
-                let _space_id = ev.space_id.clone().unwrap();
+                let _space_id = user_ev.space_id.clone();
                 //let token = ev.token.clone();
 
                 //if token.is_cancelled() {
                 //    continue;
                 //}
                 
-                if let Some(UserEventType::SpeakResultEvent(user_ev)) = ev.user_event_type {
-                    let asset = _asset_cache.lock().await.get(user_ev.asset_id.clone()).await.expect("Failed to get asset");
+                if let Some(ev) = SpeakResultEvent::from_reflect(&user_ev.ev) {
+                    let asset = _asset_cache.lock().await.get(ev.asset_id.clone()).await.expect("Failed to get asset");
                 
                     //if token.is_cancelled() {
                     //    continue;
                     //}
 
                     if !asset.bytes.is_empty() {
-                        let is_running = _state.lock().await.is_context_running(ev.context_id.clone().unwrap());
+                        let is_running = _state.lock().await.is_context_running(user_ev.context_id.clone().unwrap());
                         if is_running {
-                            _state.lock().await.new_message(_space_id.clone(), Role::Agent, Content::Text(user_ev.text.clone()));
+                            _state.lock().await.new_message(_space_id.clone(), Role::Agent, Content::Text(ev.text.clone()));
                             
                             let bytes = asset.bytes.to_vec();
                             //let file = delune::samples_to_wav(1, 24000, 16, bytes.clone());
@@ -660,7 +656,7 @@ impl AgentWorker {
                             
                             //ev.user_id
                             info!("Sending speak bytes event.");
-                            _output_tx.send(UserEvent::new(ev.user_id, _space_id, UserEventType::SpeakBytesEvent(SpeakBytesEvent { data: bytes, text: Some(user_ev.text) }))).unwrap();//.await;
+                            _output_tx.send(UserEvent::new(user_ev.user_id.clone().unwrap(), _space_id, SpeakBytesEvent { data: bytes, text: Some(ev.text) }.clone_dynamic())).unwrap();//.await;
                             //audio_output_tx.send(asset.bytes).await;
 
                             //let _state = _state.clone();
@@ -695,7 +691,6 @@ impl AgentWorker {
 
         _self
     }
-
 
     async fn process_response(state: Arc<Mutex<AgentState>>, user_id: Thing, output_tx: tokio::sync::broadcast::Sender<UserEvent>, mut input_rx: tokio::sync::broadcast::Receiver<UserEvent>, voice_id: String, asset_cache: Arc<Mutex<AssetCache>>, voice_tx: async_channel::Sender<UserEvent>) {
         let mut realtime_api_output_rx = if let Some(api) = &state.lock().await.realtime_api {
@@ -733,7 +728,7 @@ impl AgentWorker {
 
                     }
                     RealtimeEvent::Audio(mut bytes) => {
-                        output_tx.send(UserEvent::new(Some(user_id.clone()), primary_space_id.clone(), UserEventType::SpeakBytesEvent(SpeakBytesEvent { data: convert_i16_to_16_bit_u8(bytes.as_mut()).to_vec(), text: None }))).unwrap();
+                        output_tx.send(UserEvent::new(user_id.clone(), primary_space_id.clone(), SpeakBytesEvent { data: convert_i16_to_16_bit_u8(bytes.as_mut()).to_vec(), text: None }.clone_dynamic())).unwrap();
 
                         /*
                         realtime_buffer.append(&mut bytes.to_vec());
@@ -763,11 +758,11 @@ impl AgentWorker {
             //let synthesizer = Arc::new(AzureSynthesizer::new_from_env());
             let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
 
-            while let Ok(ev) = input_rx.recv().await {
+            while let Ok(user_ev) = input_rx.recv().await {
 
-                let _space_id = ev.space_id.clone().unwrap();
+                let _space_id = user_ev.space_id.clone();
 
-                let ev_description = ev.get_event_description().unwrap();
+                let ev_description = user_ev.get_event_description().unwrap();
                 //log(format!("Processing event elsewhere: {}", ev_description));  
 
                 //let args = ev.args;
@@ -777,24 +772,24 @@ impl AgentWorker {
                 //    continue;
                 //}
 
-                if let Some(context_id) = ev.context_id.clone() {
+                if let Some(context_id) = user_ev.context_id.clone() {
                     if !state.lock().await.is_context_running(context_id) {
                         continue;
                     }
                 }
     
-                if let Some(_user_id) = ev.user_id.clone() {
+                if let Some(_user_id) = user_ev.user_id.clone() {
                     if _user_id == user_id {
-                        if let Some(UserEventType::SpeakEvent(args)) = ev.user_event_type.clone() {
+                        if let Some(ev) = SpeakEvent::from_reflect(&user_ev.ev) {
                             //state.lock().await.new_message(_space_id.clone(), Role::Agent, Content::Text(args.text.clone()));
-                            output_tx.send(ev.clone());
+                            output_tx.send(user_ev.clone());
                     
                             //log(format!("[{}] Processing self event: {}", name, ev_description));
 
                             //println!("Processing speak event: {}", args.text.clone());
                             //let voice_name = "smexy-frog".to_string();
                             let voice_name = voice_id.clone();
-                            let speech_text = args.text.clone();
+                            let speech_text = ev.text.clone();
                             let emotion = "default".to_string();
                     
                             let _speech_text = speech_text.clone();
@@ -815,15 +810,15 @@ impl AgentWorker {
                     
                             asset_cache.lock().await.load_asset(asset_id.clone(), load_func, false).await.expect("Asset load error");
                     
-                            voice_tx.send(UserEvent::new_with_context(Some(user_id.clone()), _space_id.clone(), ev.context_id.clone().unwrap(), UserEventType::SpeakResultEvent(SpeakResultEvent{ asset_id: asset_id, text: speech_text.clone() }))).await;
+                            voice_tx.send(UserEvent::new_with_context(user_id.clone(), _space_id.clone(), user_ev.context_id.clone().unwrap(), SpeakResultEvent{ asset_id: asset_id, text: speech_text.clone() }.clone_dynamic())).await;
                             
-                        } else if let Some(UserEventType::SingEvent(args)) = ev.user_event_type {
+                        } else if let Some(ev) = SingEvent::from_reflect(&user_ev.ev) {
         
                             let _output_tx = output_tx.clone();
                             let _user_id = user_id.clone();
                             tokio::spawn(async move {
         
-                                let song_name = args.song_name.replace(" ", "_").to_string();
+                                let song_name = ev.song_name.replace(" ", "_").to_string();
                                 println!("SINGING SONG: {}", song_name.clone());
         
                                 let mut receiver = delune::read_wav_chunks(format!("assets/songs/{}_anatra.wav", song_name.clone()), Duration::from_millis(500), AudioFormat::new(16000, 1, 16)).await;
@@ -832,7 +827,7 @@ impl AgentWorker {
                 
                                     let data = convert_i16_to_16_bit_u8(data.as_mut()).to_vec();
                 
-                                    _output_tx.send(UserEvent::new(Some(_user_id.clone()), _space_id.clone(), UserEventType::SpeakBytesEvent(SpeakBytesEvent{ data: data, text: None }))).unwrap();
+                                    _output_tx.send(UserEvent::new(_user_id.clone(), _space_id.clone(), SpeakBytesEvent{ data: data, text: None }.clone_dynamic())).unwrap();
                                 }
                                 println!("Done playing song.");
                             });
@@ -869,28 +864,28 @@ impl UserEventWorker for AgentWorker {
 
 impl AgentState {
     
-    pub async fn process_input_event(&mut self, ev: UserEvent) -> Result<()> {
+    pub async fn process_input_event(&mut self, user_ev: UserEvent) -> Result<()> {
 
         let user_id = self.get_user_id();
-        let ev_user_id = &ev.user_id;
+        let ev_user_id = &user_ev.user_id;
 
         if ev_user_id.as_ref().unwrap() == &user_id {
             return Ok(());
         }
 
-        let ev_name = ev.get_event_name()?;
-        let ev_description = ev.get_event_description()?;
-        let space_id = ev.space_id.clone().unwrap();
+        let ev_name = user_ev.get_event_name();
+        let ev_description = user_ev.get_event_description()?;
+        let space_id = user_ev.space_id.clone();//.unwrap();
 
         if let Some(api) = &mut self.realtime_api {
-            if let Some(UserEventType::SpeakBytesEvent(args)) = ev.user_event_type {
-                api.send(RealtimeEvent::Audio(convert_16_bit_u8_to_i16(args.data.as_ref()))).await;
+            if let Some(ev) = SpeakBytesEvent::from_reflect(&user_ev.ev) {
+                api.send(RealtimeEvent::Audio(convert_16_bit_u8_to_i16(ev.data.as_ref()))).await;
             }
         } else {
             let mut is_image = false;
 
-            let content = match ev.user_event_type.as_ref().unwrap() {
-                UserEventType::ImageBytesEvent(ev) => {
+            let content =
+                if let Some(ev) = ImageBytesEvent::from_reflect(&user_ev.ev) {
                     if let Some(last_image_time) = self.last_image_time {
                         if Instant::now().duration_since(last_image_time) < Duration::from_secs(30) {
                             return Ok(());
@@ -904,15 +899,13 @@ impl AgentState {
                     let data = base64::encode(ev.data.clone());
                     let v = vec![ImageUrl { r#type: ContentType::image_url, text: None, image_url: Some(ImageUrlType { url: format!("data:image/jpeg;base64,{}",data) }) }];
                     Content::ImageUrl(v)
-                },
-                _ => {
+                } else {
                     if !self.get_config().task_configs_by_name.contains_key(&ev_name) {
                         return Ok(());
                     }
     
-                    Content::Text(ev_description.clone())    
-                }
-            };
+                    Content::Text(ev_description.clone())  
+                };
         
             //for arg in ev.args.0.as_ref()
 
