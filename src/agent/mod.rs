@@ -81,7 +81,7 @@ pub enum Role {
 
 #[bevy_trait_query::queryable]
 pub trait UserEventWorker {
-    fn is_valid_space(&self, space_id: &Thing) -> Result<bool>;
+    fn is_valid_space(&self, space_id: &Id) -> Result<bool>;
 
     fn send_event(&mut self, ev: UserEvent) -> Result<()>;
 
@@ -173,8 +173,8 @@ pub fn get_task_configs_description(task_configs: Vec<TaskConfig>) -> String {
 #[async_trait]
 pub trait Agent: Send + Sync { //where Self: Send + Sync + Sized + 'static
 
-    fn get_user_id(&self) -> Thing;
-    fn get_space_id(&self) -> Thing;
+    fn get_user_id(&self) -> Id;
+    fn get_space_id(&self) -> Id;
 
     /*
     fn new_event(&self, task: Dynamic) -> UserEvent {

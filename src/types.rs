@@ -42,9 +42,9 @@ use smart_clone::SmartClone;
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug)]
 pub struct UserEvent {
-    pub user_id: Option<Thing>,
-    pub space_id: Thing,
-    pub context_id: Option<Thing>,
+    pub user_id: Option<Id>,
+    pub space_id: Id,
+    pub context_id: Option<Id>,
     #[clone(clone_with = "DynamicStruct::clone_dynamic")]
     #[serde(with = "dynamic_struct_serde")]
     #[reflect(ignore)]

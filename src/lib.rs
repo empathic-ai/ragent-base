@@ -32,7 +32,7 @@ use bevy::reflect::{
 };
 
 #[cfg(feature = "bevy")]
-pub use flux::prelude::Thing;
+pub use flux::prelude::Id;
 
 mod types;
 use types::*;
@@ -73,7 +73,7 @@ pub mod prelude {
     pub use crate::tools::*;
     pub use crate::types::*;
     #[cfg(feature = "bevy")]
-    pub use flux::prelude::Thing;
+    pub use flux::prelude::Id;
     #[cfg(feature = "tonic")]
     pub use crate::service::*;
 }
@@ -218,7 +218,7 @@ impl UserEventType {
 
 #[cfg(feature = "bevy")]
 impl UserEvent {
-    pub fn new(user_id: Thing, space_id: Thing, ev: DynamicStruct) -> Self {
+    pub fn new(user_id: Id, space_id: Id, ev: DynamicStruct) -> Self {
         UserEvent {
             user_id: Some(user_id),
             space_id: space_id,
@@ -228,9 +228,9 @@ impl UserEvent {
     }
 
     pub fn new_with_context(
-        user_id: Thing,
-        space_id: Thing,
-        context_id: Thing,
+        user_id: Id,
+        space_id: Id,
+        context_id: Id,
         ev: DynamicStruct,
     ) -> Self {
         UserEvent {

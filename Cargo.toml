@@ -23,7 +23,7 @@ futures = ["dep:futures", "futures-util", "futures-lite"]
 prost = ["dep:prost"]
 
 [dependencies]
-bevy = { version = "0.15.0", default-features = false, optional = true }
+bevy = { version = "0.15.3", default-features = false, optional = true }
 # TODO: Replace with crates.io reference once Tonic officially supports Axum v0.8
 tonic = { version = "0.12.3", default-features = false, features = ["prost", "codegen"], optional = true }
 flux = { git = "https://github.com/empathic-ai/flux.git", default-features = false }
@@ -57,7 +57,7 @@ regex = "1.7.1"
 fancy-regex = "0.11.0"
 substring = "1.4.5"
 async-channel = "1.8.0"
-uuid = { version = "1.13.1", features = ["v4"] }
+uuid = { version = "=1.12", features = ["v4"] }
 tokio = { version = "1.32.0", default-features = false, features = ["macros", "rt", "sync"], optional = true }
 reqwest = { version = "0.12.9", default-features = false, features = ["rustls-tls", "json", "stream", "multipart"] }
 bytes = "1.5.0"

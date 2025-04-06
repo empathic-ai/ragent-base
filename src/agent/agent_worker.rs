@@ -36,7 +36,7 @@ use bevy::reflect::FromReflect;
 
 #[cfg_attr(feature = "bevy", derive(Component))]
 pub struct AgentWorker {
-    pub user_id: Thing,
+    pub user_id: Id,
     pub state: Arc<Mutex<AgentState>>,
 }
 
@@ -46,7 +46,7 @@ struct TranscriberWorker {
 }
 
 impl TranscriberWorker {
-    pub async fn new(space_id: Thing, user_id: Option<Thing>, output_tx: tokio::sync::broadcast::Sender<UserEvent>) -> Self {
+    pub async fn new(space_id: Id, user_id: Option<Id>, output_tx: tokio::sync::broadcast::Sender<UserEvent>) -> Self {
         #[cfg(not(feature="server"))]
         #[cfg(not(target_arch="wasm32"))]
         #[cfg(not(target_os="android"))]
@@ -132,9 +132,9 @@ impl TranscriberWorker {
 
 
 struct ChatCompletionResponseWorker {
-    space_id: Thing,
-    user_id: Thing,
-    context_id: Thing,
+    space_id: Id,
+    user_id: Id,
+    context_id: Id,
     config: AgentConfig,
     messages: Vec<ChatCompletionMessage>,
     chat_completer: Box<dyn ChatCompleter>,
@@ -142,7 +142,7 @@ struct ChatCompletionResponseWorker {
 }
 
 impl ChatCompletionResponseWorker {
-    pub fn new(space_id: Thing, user_id: Thing, context_id: Thing, config: AgentConfig, messages: Vec<ChatCompletionMessage>, output_tx: tokio::sync::broadcast::Sender<UserEvent>, chat_completer: Box<dyn ChatCompleter>) -> Self {
+    pub fn new(space_id: Id, user_id: Id, context_id: Id, config: AgentConfig, messages: Vec<ChatCompletionMessage>, output_tx: tokio::sync::broadcast::Sender<UserEvent>, chat_completer: Box<dyn ChatCompleter>) -> Self {
         Self {
             space_id,
             user_id,
@@ -431,17 +431,17 @@ impl ChatCompletionResponseWorker {
 // TODO: Create more dynamic use of transcribers based on requirements of users within space
 // I.e. Realtime API will generate transcriptions itself, whereas other agent types require outside transcription
 pub struct SpaceWorker {
-    pub space_id: Thing,
+    pub space_id: Id,
     pub token: CancellationToken,
     pub space_transcriber: TranscriberWorker,
-    pub user_transcribers: HashMap<Thing, TranscriberWorker>,
+    pub user_transcribers: HashMap<Id, TranscriberWorker>,
     pub output_tx: tokio::sync::broadcast::Sender<UserEvent>,
     pub output_rx: tokio::sync::broadcast::Receiver<UserEvent>,
     pub use_transcribers: bool
 }
 
 impl SpaceWorker {
-    pub async fn new(space_id: Thing) -> Self {
+    pub async fn new(space_id: Id) -> Self {
         //let (input_tx, mut input_rx) = tokio::sync::broadcast::channel::<UserEvent>(32);
         let (output_tx, mut output_rx) = tokio::sync::broadcast::channel::<UserEvent>(32);
 
@@ -485,13 +485,13 @@ impl SpaceWorker {
 }
 
 pub struct AgentState {
-    pub user_id: Thing,
+    pub user_id: Id,
     // TODO: Remove this property and enable multiple spaces using Realtime API
     // Agents not using Realtime API don't require this
-    pub primary_space_id: Thing,
+    pub primary_space_id: Id,
     pub realtime_api: Option<Box<dyn Realtime>>,
     pub synthesizer: Option<Box<dyn Synthesizer>>,
-    pub messages: HashMap<Thing, Vec<ChatCompletionMessage>>,
+    pub messages: HashMap<Id, Vec<ChatCompletionMessage>>,
     pub functions: Vec<Function>,
     pub output_tx: tokio::sync::broadcast::Sender<UserEvent>,
     pub output_rx: tokio::sync::broadcast::Receiver<UserEvent>,
@@ -503,15 +503,15 @@ pub struct AgentState {
     pub chat_completer: Option<Box<dyn ChatCompleter>>,
     pub current_emotion: String,
     pub last_image_time: Option<Instant>,
-    pub user_transcribers: HashMap<Thing, SpaceWorker>,
-    pub space_transcribers: HashMap<Thing, SpaceWorker>,
-    pub running_contexts: HashMap<Thing, tokio::sync::broadcast::Sender<()>>
+    pub user_transcribers: HashMap<Id, SpaceWorker>,
+    pub space_transcribers: HashMap<Id, SpaceWorker>,
+    pub running_contexts: HashMap<Id, tokio::sync::broadcast::Sender<()>>
     //pub agent_token: CancellationToken,
 }
 
 impl AgentWorker {
 
-    pub async fn new(user_id: Thing, primary_space_id: Thing, config: AgentConfig) -> Self {
+    pub async fn new(user_id: Id, primary_space_id: Id, config: AgentConfig) -> Self {
 
         let mut functions = Vec::<Function>::new();
 
@@ -692,7 +692,7 @@ impl AgentWorker {
         _self
     }
 
-    async fn process_response(state: Arc<Mutex<AgentState>>, user_id: Thing, output_tx: tokio::sync::broadcast::Sender<UserEvent>, mut input_rx: tokio::sync::broadcast::Receiver<UserEvent>, voice_id: String, asset_cache: Arc<Mutex<AssetCache>>, voice_tx: async_channel::Sender<UserEvent>) {
+    async fn process_response(state: Arc<Mutex<AgentState>>, user_id: Id, output_tx: tokio::sync::broadcast::Sender<UserEvent>, mut input_rx: tokio::sync::broadcast::Receiver<UserEvent>, voice_id: String, asset_cache: Arc<Mutex<AssetCache>>, voice_tx: async_channel::Sender<UserEvent>) {
         let mut realtime_api_output_rx = if let Some(api) = &state.lock().await.realtime_api {
             Some(api.get_receiver())
         } else {
@@ -845,7 +845,7 @@ impl AgentWorker {
 }
 
 impl UserEventWorker for AgentWorker {
-    fn is_valid_space(&self, space_id: &Thing) -> Result<bool> {
+    fn is_valid_space(&self, space_id: &Id) -> Result<bool> {
         todo!()
     }
 
@@ -919,7 +919,7 @@ impl AgentState {
             //    println!("{:?}: {}", message.role.unwrap(), message.content.unwrap());
             //}
             
-            log(format!("[{}] Processing event of other user ({}): {}", self.config.name, ev_user_id.clone().unwrap_or(Thing::from("None")), ev_description));
+            log(format!("[{}] Processing event of other user ({}): {}", self.config.name, ev_user_id.clone().unwrap_or(Id::from("None")), ev_description));
 
             //let (sx, rx) = async_channel::unbounded::<Pin<Box<dyn Future<Output = ()>>>>();
 
@@ -945,11 +945,11 @@ impl AgentState {
         Ok(())
     }
 
-    pub fn is_context_running(&mut self, context_id: Thing) -> bool {
+    pub fn is_context_running(&mut self, context_id: Id) -> bool {
         self.running_contexts.contains_key(&context_id)
     }
 
-    pub async fn get_chat_completion_response(&mut self, space_id: Thing) -> Result<()> {
+    pub async fn get_chat_completion_response(&mut self, space_id: Id) -> Result<()> {
         self.running_contexts.retain(|k, mut v| {
             v.send(());
             false
@@ -957,7 +957,7 @@ impl AgentState {
 
         let (cancel_tx, mut cancel_rx) = tokio::sync::broadcast::channel::<()>(1);
 
-        let context_id = Thing::new();
+        let context_id = Id::new();
         self.running_contexts.insert(context_id.clone(), cancel_tx);
 
         //let x = .unwrap();
@@ -978,7 +978,7 @@ impl AgentState {
         Ok(())
     }
 
-    pub fn get_messages(&mut self, space_id: &Thing) -> &mut Vec<ChatCompletionMessage> {
+    pub fn get_messages(&mut self, space_id: &Id) -> &mut Vec<ChatCompletionMessage> {
         let system_prompt = self.config.description.clone();
 
         match self.messages.entry(space_id.clone()) {
@@ -1002,7 +1002,7 @@ impl AgentState {
         self.messages.get_mut(&space_id.clone()).unwrap()
     }
     
-    fn get_user_id(&self) -> Thing {
+    fn get_user_id(&self) -> Id {
         self.user_id.clone()
     }
 
@@ -1015,7 +1015,7 @@ impl AgentState {
         Ok(())
     }
 
-    fn new_message(&mut self, space_id: Thing, role: Role, content: Content) {
+    fn new_message(&mut self, space_id: Id, role: Role, content: Content) {
         let mut messages = self.get_messages(&space_id);
 
         let role =  match role { Role::Agent => MessageRole::assistant, Role::Human => MessageRole::user };
