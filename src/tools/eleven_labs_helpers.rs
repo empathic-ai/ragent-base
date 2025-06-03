@@ -1,5 +1,5 @@
-use bevy::utils::HashMap;
 use lazy_static::lazy_static;
+use std::collections::HashMap;
 
 lazy_static! {
     pub static ref VOICE_ID_BY_NAME: HashMap<String, String> = {
