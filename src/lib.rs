@@ -46,12 +46,15 @@ use serde::{Deserialize, Serialize};
 use anyhow::{anyhow, Result};
 
 #[cfg(feature = "bevy")]
+#[cfg(feature = "futures")]
 pub mod agent;
 #[cfg(feature = "bevy")]
+#[cfg(feature = "futures")]
 pub mod config;
 #[cfg(feature = "bevy")]
 pub mod tasks;
 #[cfg(feature = "bevy")]
+#[cfg(feature = "futures")]
 pub mod tools;
 
 use ragent_core::prelude::*;
@@ -64,12 +67,15 @@ pub mod prelude {
     pub use crate::asset_cache::*;
 
     #[cfg(feature = "bevy")]
+    #[cfg(feature = "futures")]
     pub use crate::agent::*;
     #[cfg(feature = "bevy")]
+    #[cfg(feature = "futures")]
     pub use crate::config::*;
     #[cfg(feature = "bevy")]
     pub use crate::tasks::*;
     #[cfg(feature = "bevy")]
+    #[cfg(feature = "futures")]
     pub use crate::tools::*;
     pub use crate::types::*;
     #[cfg(feature = "bevy")]

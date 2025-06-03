@@ -2,7 +2,6 @@ use std::{str::FromStr, collections::HashMap};
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use crate::prelude::*;
 
 #[derive(Default, Clone)]
@@ -31,15 +30,6 @@ impl AgentConfig {
             (task_config.name.clone(), task_config)
         }).collect()
     }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
-pub struct PluginConfig {
-    pub uberduck_id: Uuid,
-    pub azure_voice_name: String,
-    pub name: String,
-    pub description: String,
-    pub font: String
 }
 
 pub fn load_character(_name: String) -> Option<AgentConfig> {
