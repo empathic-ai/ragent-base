@@ -6,6 +6,7 @@ use std::collections::HashMap;
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(target_arch = "xtensa"))]
 #[cfg(not(target_os = "android"))]
+#[cfg(feature = "openai")]
 pub mod dalle2_image_generator;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -25,6 +26,7 @@ pub mod prelude {
     #[cfg(not(target_arch = "wasm32"))]
     #[cfg(not(target_arch = "xtensa"))]
     #[cfg(not(target_os = "android"))]
+    #[cfg(feature = "openai")]
     pub use super::dalle2_image_generator::*;
     #[cfg(not(target_arch = "wasm32"))]
     #[cfg(not(target_os = "android"))]

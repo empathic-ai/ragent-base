@@ -1,6 +1,8 @@
 #[cfg(not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android")))]
+#[cfg(feature = "deepgram")]
 pub mod deepgram_transcriber;
 #[cfg(not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android")))]
+#[cfg(feature = "deepgram")]
 pub use deepgram_transcriber::*;
 
 #[cfg(not(any(target_arch = "wasm32", target_arch = "xtensa")))]

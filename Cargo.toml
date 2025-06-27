@@ -21,6 +21,8 @@ tonic = ["dep:tonic", "prost"]
 tokio = ["dep:tokio", "tokio-tungstenite"]
 futures = ["dep:futures", "futures-util", "futures-lite", "async-channel"]
 prost = ["dep:prost"]
+openai = ["openai-api-rs"]
+deepgram = ["dep:deepgram"]
 
 [dependencies]
 bevy = { git = "https://github.com/empathic-ai/bevy.git", branch = "reflect/serializable-dynamic-types", default-features = false, optional = true }
@@ -79,8 +81,8 @@ byteorder = "1.5.0"
 symphonia = { version = "0.5.4", default-features = false, optional = true }
 
 [target.'cfg(all(not(target_arch = "xtensa"), not(target_arch = "wasm32"), not(target_os = "android")))'.dependencies]
-openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git" }
-deepgram = { git = "https://github.com/empathic-ai/deepgram-rust-sdk.git" }
+openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git", optional = true }
+deepgram = { git = "https://github.com/empathic-ai/deepgram-rust-sdk.git", optional = true }
 anthropic = { git = "https://github.com/AbdelStark/anthropic-rs.git", default-features = false, optional = true }
 tokio-tungstenite = { version = "0.24.0", optional = true }
 

@@ -4,6 +4,7 @@ use anyhow::Result;
 use std::collections::HashMap;
 
 #[cfg(not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android")))]
+#[cfg(feature = "openai")]
 pub mod openai_synthesizer;
 #[cfg(not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android")))]
 pub mod play_ht_synthesizer;
@@ -35,6 +36,7 @@ pub trait Synthesizer: Send + Sync {
 
 pub mod prelude {
     #[cfg(not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android")))]
+    #[cfg(feature = "openai")]
     pub use super::openai_synthesizer::*;
     #[cfg(not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android")))]
     pub use super::play_ht_synthesizer::*;

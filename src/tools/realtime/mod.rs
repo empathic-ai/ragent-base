@@ -4,8 +4,10 @@ use tokio::sync::broadcast::{self, channel, Sender, Receiver};
 use dyn_clone::DynClone;
 
 #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
+#[cfg(feature = "openai")]
 pub mod chatgpt_realtime;
 #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
+#[cfg(feature = "openai")]
 pub use chatgpt_realtime::*;
 
 #[derive(Clone)]

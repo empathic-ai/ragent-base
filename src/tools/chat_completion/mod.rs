@@ -14,10 +14,12 @@ pub use claude_chat_completer::*;
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(target_arch = "xtensa"))]
 #[cfg(not(target_os = "android"))]
+#[cfg(feature = "openai")]
 pub mod chat_gpt_chat_completer;
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(target_arch = "xtensa"))]
 #[cfg(not(target_os = "android"))]
+#[cfg(feature = "openai")]
 pub use chat_gpt_chat_completer::*;
 
 #[cfg(feature = "candle")]
