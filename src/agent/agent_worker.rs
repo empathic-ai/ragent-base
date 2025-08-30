@@ -101,7 +101,7 @@ impl TranscriberWorker {
                             };
 
                             info!("Got transcript result for user ({}): '{}'", user_id.clone().unwrap_or_default(), text);
-                            output_tx.send(UserEvent::new(user_id.clone().unwrap(), space_id.clone(), SpeakEvent { text: text }.clone_dynamic())).expect("Failed to send speak event");
+                            output_tx.send(UserEvent::new(user_id.unwrap(), space_id, SpeakEvent { text: text })).expect("Failed to send speak event");
                         }
                     },
                     Err(err) => {
@@ -656,7 +656,7 @@ impl AgentWorker {
                             
                             //ev.user_id
                             info!("Sending speak bytes event.");
-                            _output_tx.send(UserEvent::new(user_ev.user_id.clone().unwrap(), _space_id, SpeakBytesEvent { data: bytes, text: Some(ev.text) }.clone_dynamic())).unwrap();//.await;
+                            _output_tx.send(UserEvent::new(user_ev.user_id.unwrap(), _space_id, SpeakBytesEvent { data: bytes, text: Some(ev.text) })).unwrap();//.await;
                             //audio_output_tx.send(asset.bytes).await;
 
                             //let _state = _state.clone();
@@ -728,7 +728,7 @@ impl AgentWorker {
 
                     }
                     RealtimeEvent::Audio(mut bytes) => {
-                        output_tx.send(UserEvent::new(user_id.clone(), primary_space_id.clone(), SpeakBytesEvent { data: convert_i16_to_16_bit_u8(bytes.as_mut()).to_vec(), text: None }.clone_dynamic())).unwrap();
+                        output_tx.send(UserEvent::new(user_id, primary_space_id, SpeakBytesEvent { data: convert_i16_to_16_bit_u8(bytes.as_mut()).to_vec(), text: None })).unwrap();
 
                         /*
                         realtime_buffer.append(&mut bytes.to_vec());
@@ -827,7 +827,7 @@ impl AgentWorker {
                 
                                     let data = convert_i16_to_16_bit_u8(data.as_mut()).to_vec();
                 
-                                    _output_tx.send(UserEvent::new(_user_id.clone(), _space_id.clone(), SpeakBytesEvent{ data: data, text: None }.clone_dynamic())).unwrap();
+                                    _output_tx.send(UserEvent::new(_user_id, _space_id, SpeakBytesEvent{ data: data, text: None })).unwrap();
                                 }
                                 println!("Done playing song.");
                             });

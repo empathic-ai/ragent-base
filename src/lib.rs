@@ -17,6 +17,7 @@ pub use crate::service::user_event::UserEventType;
 pub use crate::service::UserEvent;
 
 #[cfg(feature = "tokio")]
+#[cfg(feature = "futures")]
 pub mod asset_cache;
 
 #[cfg(feature = "bevy")]
@@ -64,6 +65,7 @@ pub mod prelude {
     pub use ragent_core::prelude::*;
 
     #[cfg(feature = "tokio")]
+    #[cfg(feature = "futures")]
     pub use crate::asset_cache::*;
 
     #[cfg(feature = "bevy")]
@@ -224,12 +226,12 @@ impl UserEventType {
 
 #[cfg(feature = "bevy")]
 impl UserEvent {
-    pub fn new(user_id: Id, space_id: Id, ev: DynamicStruct) -> Self {
+    pub fn new<T>(user_id: Id, space_id: Id, ev: T) -> Self where T: Struct {
         UserEvent {
             user_id: Some(user_id),
             space_id: space_id,
             context_id: None,
-            ev: ev,
+            ev: ev.clone_dynamic(),
         }
     }
 
