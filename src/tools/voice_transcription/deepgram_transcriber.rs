@@ -12,40 +12,46 @@ use bytes::{BufMut, Bytes, BytesMut};
 //use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 //use cpal::Sample;
 use crossbeam::channel::RecvError;
+use futures::SinkExt;
 use futures::channel::mpsc;
 use futures::stream::StreamExt;
-use futures::SinkExt;
 
+use deepgram::transcription::live::StreamResponse::{TerminalResponse, TranscriptResponse};
 use deepgram::{Deepgram, DeepgramError};
-use deepgram::transcription::live::StreamResponse::{TranscriptResponse, TerminalResponse};
 use std::error::Error;
 
 use crate::tools::TranscriptionResponse;
 
-use super::{result, Transcriber};
-use anyhow::Result;
-use tokio::sync::broadcast::{self, Sender, Receiver};
+use super::{Transcriber, result};
+use anyhow::{Context, Result};
+use tokio::sync::broadcast::{self, Receiver, Sender};
 
+use bevy::prelude::*;
 use common::prelude::*;
+
 pub struct DeepgramTranscriber {
-    languages: Vec<String>
+    languages: Vec<String>,
 }
 
 impl DeepgramTranscriber {
     pub fn new_from_env() -> Self {
         DeepgramTranscriber {
-            languages: vec!["en".to_string()]
+            languages: vec!["en".to_string()],
         }
     }
 }
 
 #[async_trait]
 impl Transcriber for DeepgramTranscriber {
-        // TODO: Re-connect after connection closes due to timeout
+    // TODO: Re-connect after connection closes due to timeout
     // Possibly use VAD for detecting when to re-initialize a connection?
     // 48000
-    async fn transcribe_stream(&mut self, sample_rate: u32, stream: Receiver<Bytes>, token: CancellationToken) -> Result<mpsc::UnboundedReceiver<Result<TranscriptionResponse>>> {
-
+    async fn transcribe_stream(
+        &mut self,
+        sample_rate: u32,
+        stream: Receiver<Bytes>,
+        token: CancellationToken,
+    ) -> Result<mpsc::UnboundedReceiver<Result<TranscriptionResponse>>> {
         // If only one language is supported, use Deepgram's streaming mode (which don't support language detection)
         // Otherwise, use Deepgram's non-streaming mode
         if self.languages.len() == 1 {
@@ -55,7 +61,7 @@ impl Transcriber for DeepgramTranscriber {
 
             //println!("Getting Deepgram stream...");
             let _token = token.clone();
-            
+
             tokio::task::spawn(async move {
                 loop {
                     let _token = _token.clone();
@@ -66,14 +72,13 @@ impl Transcriber for DeepgramTranscriber {
                     let stream_clone = stream.clone();
 
                     let item = stream.lock().await.recv().await.clone();
-                    
-                    if let Ok(item) = item {
 
+                    if let Ok(item) = item {
                         //println!("GOT VOICE DATA ITEM!");
                         let (mut forward_tx, mut forward_rx) = mpsc::channel::<Result<Bytes>>(16);
 
                         let is_terminated = Arc::new(Mutex::new(false));
-        
+
                         let _is_terminated = is_terminated.clone();
 
                         let mut _forward_tx = forward_tx.clone();
@@ -82,26 +87,38 @@ impl Transcriber for DeepgramTranscriber {
                         tokio::spawn(async move {
                             let mut locked_stream = stream_clone.lock().await;
 
-                            while let Ok(item) = locked_stream.recv().await {
-                                let _token = _token.clone();
-                                if _token.is_cancelled() {
-                                    continue;
-                                }
-        
-                                if _is_terminated.lock().await.to_owned() {
-                                    break;
-                                }
-                                if forward_tx.send(Ok(item)).await.is_err() {
-                                    //panic!("STREAM ERROR");
-                                    break;
+                            loop {
+                                match locked_stream.recv().await {
+                                    Ok(item) => {
+                                        let _token = _token.clone();
+                                        if _token.is_cancelled() {
+                                            continue;
+                                        }
+
+                                        if _is_terminated.lock().await.to_owned() {
+                                            break;
+                                        }
+                                        if forward_tx.send(Ok(item)).await.is_err() {
+                                            //panic!("STREAM ERROR");
+                                            break;
+                                        }
+                                    }
+                                    Err(broadcast::error::RecvError::Lagged(n)) => {
+                                        warn!("Transcription stream lagged, dropped {n} chunks — continuing");
+                                        continue;
+                                    }
+                                    Err(err) => {
+                                        forward_tx.send(Err(err).context("Transcription error")).await;
+                                        break;
+                                    }
                                 }
                             }
                         });
-        
+
                         let dg = Deepgram::new(env::var("DEEPGRAM_API_KEY").unwrap());
-        
-                        //println!("Getting Deepgram results...");
-                        
+
+                        info!("Connecting to Deepgram...");
+
                         let mut results = dg
                             .transcription()
                             .stream_request()
@@ -109,16 +126,19 @@ impl Transcriber for DeepgramTranscriber {
                             // TODO Enum.
                             .encoding("linear16".to_string())
                             // TODO Specific to my machine, not general enough example.
-                            .sample_rate(sample_rate)//44100)
+                            .sample_rate(sample_rate) //44100)
                             // TODO Specific to my machine, not general enough example.
                             .channels(1)
                             .start()
                             .await;
-                        
+
                         //println!("Sending first voice item!");
-       
+
                         if let Err(err) = _forward_tx.send(Ok(item)).await {
-                            println!("Error sending initial voice data to transcriber! Wiil try restarting: {}", err);
+                            println!(
+                                "Error sending initial voice data to transcriber! Wiil try restarting: {}",
+                                err
+                            );
                             continue;
                         }
                         //println!("Sent first voice item!");
@@ -128,69 +148,94 @@ impl Transcriber for DeepgramTranscriber {
                                 let _token = token.clone();
                                 while let Some(result) = results.next().await {
                                     let _token = _token.clone();
-            
+
                                     if _token.is_cancelled() {
                                         continue;
                                     }
-            
+
                                     match result {
                                         Ok(result) => {
                                             match result {
-                                                TranscriptResponse { duration, is_final, channel } => {
-                                                    let mut transcript_responses = Vec::<TranscriptionResponse>::new();
-    
-                                                    let first_alternative = &channel.alternatives.first().unwrap();
+                                                TranscriptResponse {
+                                                    duration,
+                                                    is_final,
+                                                    channel,
+                                                } => {
+                                                    let mut transcript_responses =
+                                                        Vec::<TranscriptionResponse>::new();
+
+                                                    let first_alternative =
+                                                        &channel.alternatives.first().unwrap();
                                                     for word in first_alternative.words.iter() {
                                                         if word.confidence < 0.5 {
-                                                            transcript_responses.push(TranscriptionResponse { speaker: None, transcript: word.word.clone(), ..Default::default() });
+                                                            transcript_responses.push(
+                                                                TranscriptionResponse {
+                                                                    speaker: None,
+                                                                    transcript: word.word.clone(),
+                                                                    ..Default::default()
+                                                                },
+                                                            );
                                                         } else {
-                                                            if let Some(mut last) = transcript_responses.last_mut() {
+                                                            if let Some(mut last) =
+                                                                transcript_responses.last_mut()
+                                                            {
                                                                 if word.speaker == last.speaker {
-                                                                    last.transcript += &(" ".to_string() + word.word.as_str());
+                                                                    last.transcript += &(" "
+                                                                        .to_string()
+                                                                        + word.word.as_str());
                                                                     continue;
                                                                 }
                                                             }
-                                                            transcript_responses.push(TranscriptionResponse { speaker: word.speaker.clone(), transcript: word.word.clone(),  ..Default::default() });
+                                                            transcript_responses.push(
+                                                                TranscriptionResponse {
+                                                                    speaker: word.speaker.clone(),
+                                                                    transcript: word.word.clone(),
+                                                                    ..Default::default()
+                                                                },
+                                                            );
                                                         }
                                                     }
-                                                    
+
                                                     //let transcript = first_alternative.transcript;
                                                     //println!("Transcript: {:?}", transcript);
-    
+
                                                     for response in transcript_responses {
                                                         //println!("[Speaker:{:?}] {:?}", response.speaker.unwrap(), response.transcript);
                                                         async_tx.send(Ok(response.clone())).await;
                                                     }
-                                                },
-                                                TerminalResponse { request_id, created, duration, channels } => {
+                                                }
+                                                TerminalResponse {
+                                                    request_id,
+                                                    created,
+                                                    duration,
+                                                    channels,
+                                                } => {
                                                     *is_terminated.lock().await = true;
                                                     // Connection closed--will need to reconnect
                                                     //async_tx.close().await;
                                                     //break;
-                                                    println!("Deepgram terminated");
+                                                    info!("Deepgram connection terminated (ID: {})", request_id);
                                                     break;
-                                                },
+                                                }
                                             }
-                                        },
+                                        }
                                         Err(err) => {
-                                            println!("DEEPGRAM ERROR: {}", err.to_string())
-                                        },
+                                            warn!("DEEPGRAM ERROR: {}", err.to_string())
+                                        }
                                     }
                                 }
-                            },
+                            }
                             Err(err) => {
-                                println!("Failed to get Deepgram transcription: {}", err);
+                                warn!("Failed to get Deepgram transcription: {}", err);
                                 break;
                             }
                         }
                     }
-
                 }
             });
 
             Ok(async_rx)
         } else {
-            
             todo!();
             /*
             let dg = Deepgram::new(env::var("DEEPGRAM_API_KEY").unwrap());
@@ -200,12 +245,11 @@ impl Transcriber for DeepgramTranscriber {
                 dg.transcription().prerecorded(deepgram::transcription::prerecorded::audio_source::AudioSource::from_buffer(item), deepgram::transcription::prerecorded::options::OptionsBuilder::new().detect_language(true).language(language))
             }
              */
-
         }
     }
 }
 
-/* 
+/*
 fn microphone_as_stream() -> Receiver<Result<Bytes, RecvError>> {
     let (sync_tx, sync_rx) = crossbeam::channel::unbounded();
     let (mut async_tx, async_rx) = mpsc::channel(1);

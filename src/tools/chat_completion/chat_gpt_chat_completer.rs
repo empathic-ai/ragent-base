@@ -1,6 +1,7 @@
 use async_channel::{Sender, Receiver};
 use bytes::Bytes;
 use futures_util::lock::Mutex;
+use log::info;
 use openai_api_rs::v1::api::OpenAIClient;
 use openai_api_rs::v1::chat_completion::*;
 
@@ -37,6 +38,8 @@ impl ChatCompleter for ChatGPTChatCompleter {
     async fn get_response(&mut self, messages: Vec<super::ChatCompletionMessage>, task_configs: Vec<TaskConfig>) -> Result<Pin<Box<dyn Stream<Item = Result<super::ChatCompletionResponse>> + Send>>> {
         //GPT3_5_TURBO
         //GPT4_0613
+
+        info!("Getting chat response from OpenAI API...");
 
         let mut messages: Vec<_> = messages.into_iter().map(|message| {
 
@@ -143,7 +146,7 @@ impl ChatCompleter for ChatGPTChatCompleter {
                     }
                 },
                 Err(e) => {
-                    println!("ERROR GETTING CHAT RESPONSE: {}", e);
+                    info!("ERROR GETTING CHAT RESPONSE: {}", e);
                     Err(e)
                 },
             }

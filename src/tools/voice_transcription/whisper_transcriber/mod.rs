@@ -1,13 +1,13 @@
 #![allow(warnings)]
-use async_trait::async_trait;
-use tokio::sync::broadcast::{self, Sender, Receiver};
-use bytes::{BufMut, Bytes, BytesMut};
-use anyhow::Result;
-use futures::channel::mpsc;
-use common::prelude::*;
 use crate::tools::candle_helpers;
+use anyhow::Result;
+use async_trait::async_trait;
+use bytes::{BufMut, Bytes, BytesMut};
+use common::prelude::*;
+use futures::channel::mpsc;
+use tokio::sync::broadcast::{self, Receiver, Sender};
 
-use super::{result, Transcriber, TranscriptionResponse};
+use super::{Transcriber, TranscriptionResponse, result};
 
 // https://github.com/openai/whisper/blob/main/whisper/model.py/rgs
 // TODO:
@@ -20,18 +20,18 @@ extern crate accelerate_src;
 #[cfg(feature = "mkl")]
 extern crate intel_mkl_src;
 
-use anyhow::{Error as E};
+use anyhow::Error as E;
 use candle_core::{Device, IndexOp, Tensor};
-use candle_nn::{ops::softmax, VarBuilder};
+use candle_nn::{VarBuilder, ops::softmax};
 //use clap::{Parser, ValueEnum};
-use hf_hub::{api::sync::Api, Repo, RepoType};
-use rand::{distributions::Distribution, SeedableRng};
+use hf_hub::{Repo, RepoType, api::sync::Api};
+use rand::{SeedableRng, distributions::Distribution};
 use tokenizers::Tokenizer;
 
 mod multilingual;
 mod pcm_decode;
 
-use candle_transformers::models::whisper::{self as m, audio, Config};
+use candle_transformers::models::whisper::{self as m, Config, audio};
 
 pub enum Model {
     Normal(m::model::Whisper),
@@ -499,7 +499,7 @@ fn main() -> Result<()> {
         timestamps: todo!(),
         verbose: todo!(),
     };
-    
+
     let _guard = if args.tracing {
         let (chrome_layer, guard) = ChromeLayerBuilder::new().build();
         tracing_subscriber::registry().with(chrome_layer).init();
@@ -533,7 +533,9 @@ fn main() -> Result<()> {
                 std::path::PathBuf::from(input)
             }
         } else {
-            println!("No audio file submitted: Downloading https://huggingface.co/datasets/Narsil/candle_demo/blob/main/samples_jfk.wav");
+            println!(
+                "No audio file submitted: Downloading https://huggingface.co/datasets/Narsil/candle_demo/blob/main/samples_jfk.wav"
+            );
             dataset.get("samples_jfk.wav")?
         };
         let (config, tokenizer, model) = if args.quantized {
@@ -617,21 +619,22 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-pub struct WhisperTranscriber {
-    
-}
+pub struct WhisperTranscriber {}
 
 impl WhisperTranscriber {
     pub fn new() -> Self {
-        WhisperTranscriber {
-
-        }
+        WhisperTranscriber {}
     }
 }
 
 #[async_trait]
 impl Transcriber for WhisperTranscriber {
-    async fn transcribe_stream(&mut self, sample_rate: u32, stream: Receiver<Bytes>, token: CancellationToken) -> Result<mpsc::UnboundedReceiver<Result<TranscriptionResponse>>> {
+    async fn transcribe_stream(
+        &mut self,
+        sample_rate: u32,
+        stream: Receiver<Bytes>,
+        token: CancellationToken,
+    ) -> Result<mpsc::UnboundedReceiver<Result<TranscriptionResponse>>> {
         todo!();
     }
 }
