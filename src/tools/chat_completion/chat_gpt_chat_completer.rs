@@ -2,8 +2,10 @@ use async_channel::{Sender, Receiver};
 use bytes::Bytes;
 use futures_util::lock::Mutex;
 use log::info;
-use openai_api_rs::v1::api::OpenAIClient;
-use openai_api_rs::v1::chat_completion::*;
+use openai_api_rs::v1::api::{OpenAIClient, OpenAIClientBuilder};
+use openai_api_rs::v1::chat_completion::chat_completion::ChatCompletionRequest;
+use openai_api_rs::v1::chat_completion::chat_completion_stream::{ChatCompletionStreamRequest, ChatCompletionStreamResponse};
+use openai_api_rs::v1::{types::*, chat_completion::*};
 
 use async_trait::async_trait;
 
@@ -46,10 +48,10 @@ impl ChatCompleter for ChatGPTChatCompleter {
             //dbg!(message.clone());
             openai_api_rs::v1::chat_completion::ChatCompletionMessage {
                 role: match message.role {
-                    chat_completion::MessageRole::user =>  openai_api_rs::v1::chat_completion::MessageRole::user,
-                    chat_completion::MessageRole::system =>  openai_api_rs::v1::chat_completion::MessageRole::system,
-                    chat_completion::MessageRole::assistant =>  openai_api_rs::v1::chat_completion::MessageRole::assistant,
-                    chat_completion::MessageRole::function =>  openai_api_rs::v1::chat_completion::MessageRole::function,
+                    super::MessageRole::user =>  openai_api_rs::v1::chat_completion::MessageRole::user,
+                    super::MessageRole::system =>  openai_api_rs::v1::chat_completion::MessageRole::system,
+                    super::MessageRole::assistant =>  openai_api_rs::v1::chat_completion::MessageRole::assistant,
+                    super::MessageRole::function =>  openai_api_rs::v1::chat_completion::MessageRole::function,
                 },
                 content: match message.content {
                     super::Content::Text(text) => openai_api_rs::v1::chat_completion::Content::Text(text),
@@ -69,7 +71,7 @@ impl ChatCompleter for ChatGPTChatCompleter {
             }
         }).collect();
 
-        let mut functions = Vec::<openai_api_rs::v1::chat_completion::Function>::new();
+        let mut functions = Vec::<openai_api_rs::v1::types::Function>::new();
 
         let model_name = openai_api_rs::v1::common::GPT4_O.to_string();// GPT4_0613.to_string();
 
@@ -104,10 +106,10 @@ impl ChatCompleter for ChatGPTChatCompleter {
                 }
 
                 let required = properties.keys().clone().map(|x| x.to_owned()).collect();
-                functions.push(openai_api_rs::v1::chat_completion::Function {
+                functions.push(openai_api_rs::v1::types::Function {
                     name: config.name.clone(),
                     description: Some(config.description.clone()),
-                    parameters: openai_api_rs::v1::chat_completion::FunctionParameters {
+                    parameters: openai_api_rs::v1::types::FunctionParameters {
                         schema_type: JSONSchemaType::Object,
                         properties: Some(properties),
                         required: Some(required),
@@ -116,15 +118,22 @@ impl ChatCompleter for ChatGPTChatCompleter {
             }
         }
 
-        let chat_completion_request: ChatCompletionRequest = ChatCompletionRequest::new(model_name.clone(), messages).stream(true);
+        let chat_completion_request = ChatCompletionStreamRequest::new(model_name.clone(), messages);//.stream(true);
        
-        let client = OpenAIClient::new(self.api_key.clone());
-        let mut stream = client.chat_completion_stream(chat_completion_request.clone()).await.expect("Failed to get chat completion stream.");
+        let client = OpenAIClientBuilder::new().with_api_key(self.api_key.clone()).build().unwrap();
+        let mut stream = client.chat_completion_stream(chat_completion_request.clone()).await.map_err(|x| anyhow!("Failed to get chat completion stream: {}", x))?;
         
         let model_name = model_name.clone();
         let stream = stream.map(move |x| {
+            let estimated_cost = Decimal::default();
+
             match x {
-                Ok(x) => {
+                ChatCompletionStreamResponse::Content(x) => {
+                    Ok(super::ChatCompletionResponse {
+                        completion: x,
+                        estimated_cost
+                    })
+                    /*
                     let estimated_cost = if let Some(usage) = x.usage {
                         calculate_cost(model_name.clone(), usage.prompt_tokens, usage.completion_tokens, false, false)
                     } else {
@@ -144,10 +153,15 @@ impl ChatCompleter for ChatGPTChatCompleter {
                             estimated_cost
                         })
                     }
+                     */
                 },
-                Err(e) => {
-                    info!("ERROR GETTING CHAT RESPONSE: {}", e);
-                    Err(e)
+                _ => {
+                    Ok(super::ChatCompletionResponse {
+                        completion: "".to_string(),
+                        estimated_cost
+                    })
+                    //info!("ERROR GETTING CHAT RESPONSE: {}", e);
+                    //Err(e)
                 },
             }
         });

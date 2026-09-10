@@ -137,13 +137,10 @@ impl Synthesizer for ElevenLabsSynthesizer {
                 */
                 Ok(SynthesisResult { bytes: bytes.to_vec(), ..Default::default() })
                 //Ok(())
-        } else {
-            info!("Error: {}", response.status().to_string());
-            info!("Text: {}", response.text().await.unwrap());
-            
+        } else {            
             //info!("Response: {}", response.text().await.unwrap());
             //dbg!(err);
-            Err(anyhow!("Error synthesizing speech!"))
+            Err(anyhow!("Eleven Labs failed to synthesize speech: {} {}", response.status().to_string(), response.text().await.unwrap()))
         }
     }
 }

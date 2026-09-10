@@ -1,6 +1,10 @@
 #![allow(warnings)]
 use async_trait::async_trait;
 use deepgram;
+use deepgram::common::options::Model;
+
+#[path = "deepgram_stream_config.rs"]
+mod stream_config;
 use tokio::runtime::Handle;
 use tokio::sync::{Mutex, RwLock};
 
@@ -14,16 +18,18 @@ use bytes::{BufMut, Bytes, BytesMut};
 use crossbeam::channel::RecvError;
 use futures::SinkExt;
 use futures::channel::mpsc;
-use futures::stream::StreamExt;
+use futures_lite::stream::{Boxed, StreamExt as LiteStreamExt};
 
-use deepgram::transcription::live::StreamResponse::{TerminalResponse, TranscriptResponse};
+use deepgram::common::flux_response::{FluxResponse, TurnEvent};
+use deepgram::common::stream_response::StreamResponse;
 use deepgram::{Deepgram, DeepgramError};
+use deepgram::common::options::Encoding;
 use std::error::Error;
 
 use crate::tools::TranscriptionResponse;
 
 use super::{Transcriber, result};
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use tokio::sync::broadcast::{self, Receiver, Sender};
 
 use bevy::prelude::*;
@@ -31,6 +37,25 @@ use common::prelude::*;
 
 pub struct DeepgramTranscriber {
     languages: Vec<String>,
+}
+
+enum DeepgramEvent {
+    Flux(FluxResponse),
+    Standard(StreamResponse),
+}
+
+fn is_flux_model(model: &Model) -> bool {
+    match model {
+        Model::FluxGeneralEn => true,
+        _ => false,
+    }
+}
+
+// The shared project's token is atomic-only, without a notification future.
+async fn cancelled(token: &CancellationToken) {
+    while !token.is_cancelled() {
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
 }
 
 impl DeepgramTranscriber {
@@ -43,9 +68,6 @@ impl DeepgramTranscriber {
 
 #[async_trait]
 impl Transcriber for DeepgramTranscriber {
-    // TODO: Re-connect after connection closes due to timeout
-    // Possibly use VAD for detecting when to re-initialize a connection?
-    // 48000
     async fn transcribe_stream(
         &mut self,
         sample_rate: u32,
@@ -55,6 +77,7 @@ impl Transcriber for DeepgramTranscriber {
         // If only one language is supported, use Deepgram's streaming mode (which don't support language detection)
         // Otherwise, use Deepgram's non-streaming mode
         if self.languages.len() == 1 {
+            let api_key = env::var("DEEPGRAM_API_KEY").context("Missing DEEPGRAM_API_KEY")?;
             let (mut async_tx, async_rx) = mpsc::unbounded::<Result<TranscriptionResponse>>();
 
             let stream = Arc::new(Mutex::new(stream));
@@ -66,170 +89,249 @@ impl Transcriber for DeepgramTranscriber {
                 loop {
                     let _token = _token.clone();
                     if _token.is_cancelled() {
-                        continue;
+                        break;
                     }
 
                     let stream_clone = stream.clone();
 
-                    let item = stream.lock().await.recv().await.clone();
+                    let item = tokio::select! {
+                        _ = cancelled(&token) => break,
+                        item = async { stream.lock().await.recv().await } => item,
+                    };
+                    if matches!(item, Err(broadcast::error::RecvError::Closed)) { break; }
+                    if let Err(broadcast::error::RecvError::Lagged(n)) = item {
+                        warn!("Transcription stream lagged while reconnecting, dropped {n} chunks");
+                        continue;
+                    }
 
                     if let Ok(item) = item {
                         //println!("GOT VOICE DATA ITEM!");
-                        let (mut forward_tx, mut forward_rx) = mpsc::channel::<Result<Bytes>>(16);
+                        let (mut forward_tx, mut forward_rx) = mpsc::channel::<std::result::Result<Bytes, deepgram::DeepgramError>>(16);
 
-                        let is_terminated = Arc::new(Mutex::new(false));
+                        let (forward_done_tx, mut forward_done_rx) = tokio::sync::oneshot::channel();
 
-                        let _is_terminated = is_terminated.clone();
-
-                        let mut _forward_tx = forward_tx.clone();
+                        // Queue the first item before later audio can overtake it.
+                        if forward_tx.send(Ok(item)).await.is_err() {
+                            break;
+                        }
 
                         // Start a task to forward items from the original stream to the new stream
-                        tokio::spawn(async move {
+                        let forward_task = tokio::spawn(async move {
                             let mut locked_stream = stream_clone.lock().await;
+                            let mut forwarded_bytes = 0usize;
+                            let mut reported_at = std::time::Instant::now();
 
                             loop {
-                                match locked_stream.recv().await {
+                                let item = tokio::select! {
+                                    _ = cancelled(&_token) => break,
+                                    item = tokio::time::timeout(std::time::Duration::from_secs(15), locked_stream.recv()) => {
+                                        match item {
+                                            Ok(item) => item,
+                                            Err(_) => {
+                                                info!("Deepgram input idle for 15s; closing session");
+                                                break;
+                                            }
+                                        }
+                                    },
+                                };
+                                match item {
                                     Ok(item) => {
                                         let _token = _token.clone();
                                         if _token.is_cancelled() {
-                                            continue;
+                                            break;
                                         }
 
-                                        if _is_terminated.lock().await.to_owned() {
-                                            break;
-                                        }
-                                        if forward_tx.send(Ok(item)).await.is_err() {
+                                        forwarded_bytes += item.len();
+                                        let sent = tokio::select! {
+                                            _ = cancelled(&_token) => break,
+                                            _ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
+                                                warn!("Deepgram audio forwarding stalled for 10s; closing session");
+                                                break;
+                                            },
+                                            sent = forward_tx.send(Ok(item)) => sent,
+                                        };
+                                        if sent.is_err() {
                                             //panic!("STREAM ERROR");
                                             break;
+                                        }
+                                        if reported_at.elapsed() >= std::time::Duration::from_secs(5) {
+                                            info!("Deepgram input: {} bytes ({} ms audio) forwarded in {:?}; {} messages pending",
+                                                forwarded_bytes, forwarded_bytes * 1000 / (sample_rate as usize * 2),
+                                                reported_at.elapsed(), locked_stream.len());
+                                            forwarded_bytes = 0;
+                                            reported_at = std::time::Instant::now();
                                         }
                                     }
                                     Err(broadcast::error::RecvError::Lagged(n)) => {
                                         warn!("Transcription stream lagged, dropped {n} chunks — continuing");
                                         continue;
                                     }
-                                    Err(err) => {
-                                        forward_tx.send(Err(err).context("Transcription error")).await;
-                                        break;
-                                    }
+                                    Err(broadcast::error::RecvError::Closed) => break,
                                 }
                             }
+                            let _ = forward_done_tx.send(());
                         });
 
-                        let dg = Deepgram::new(env::var("DEEPGRAM_API_KEY").unwrap());
+                        let dg = Deepgram::new(api_key.clone()).expect("Failed to start Deepgram API");
 
-                        info!("Connecting to Deepgram...");
+                        let model = Model::Nova3;
+                        let use_flux = is_flux_model(&model);
+                        let standard_model = model.clone();
+                        info!("Connecting to Deepgram using {}...", if use_flux { "FluxGeneralEn" } else { "standard model" });
 
-                        let mut results = dg
-                            .transcription()
-                            .stream_request()
-                            .stream(forward_rx)
-                            // TODO Enum.
-                            .encoding("linear16".to_string())
-                            // TODO Specific to my machine, not general enough example.
-                            .sample_rate(sample_rate) //44100)
-                            // TODO Specific to my machine, not general enough example.
-                            .channels(1)
-                            .start()
-                            .await;
+                        let connect_started = std::time::Instant::now();
+                        let connect = async move {
+                            let transcription = dg.transcription();
+                            if use_flux {
+                                let results = transcription
+                                    .flux_request()
+                                    .encoding(Encoding::Linear16)
+                                    .sample_rate(sample_rate)
+                                    .stream(forward_rx)
+                                    .await?;
+                                Ok::<Boxed<std::result::Result<DeepgramEvent, DeepgramError>>, DeepgramError>(
+                                    Box::pin(LiteStreamExt::map(results, |result| result.map(DeepgramEvent::Flux))),
+                                )
+                            } else {
+                                let results = stream_config::standard_request(&dg, standard_model, sample_rate)
+                                    .stream(forward_rx)
+                                    .await?;
+                                Ok::<Boxed<std::result::Result<DeepgramEvent, DeepgramError>>, DeepgramError>(
+                                    Box::pin(LiteStreamExt::map(results, |result| result.map(DeepgramEvent::Standard))),
+                                )
+                            }
+                        };
 
-                        //println!("Sending first voice item!");
-
-                        if let Err(err) = _forward_tx.send(Ok(item)).await {
-                            println!(
-                                "Error sending initial voice data to transcriber! Wiil try restarting: {}",
-                                err
-                            );
-                            continue;
-                        }
-                        //println!("Sent first voice item!");
+                        let results = tokio::select! {
+                            _ = cancelled(&token) => {
+                                forward_task.abort();
+                                let _ = forward_task.await;
+                                break;
+                            },
+                            results = tokio::time::timeout(std::time::Duration::from_secs(10), connect) => {
+                                match results {
+                                    Ok(results) => results,
+                                    Err(err) => Err(DeepgramError::InternalClientError(anyhow!("Deepgram connection timed out: {err}"))),
+                                }
+                            },
+                        };
 
                         match results {
                             Ok(mut results) => {
+                                info!("Deepgram connected in {:?} (PCM16 mono, {} Hz)", connect_started.elapsed(), sample_rate);
                                 let _token = token.clone();
-                                while let Some(result) = results.next().await {
+                                let mut drain_deadline = None;
+                                loop {
+                                    let result = tokio::select! {
+                                        _ = cancelled(&token) => break,
+                                        _ = &mut forward_done_rx, if drain_deadline.is_none() => {
+                                            // Let the SDK finalize buffered audio, but never
+                                            // wait forever for a terminal response on a dead socket.
+                                            drain_deadline = Some(tokio::time::Instant::now() + std::time::Duration::from_secs(2));
+                                            continue;
+                                        },
+                                        _ = async {
+                                            match drain_deadline {
+                                                Some(deadline) => tokio::time::sleep_until(deadline).await,
+                                                None => std::future::pending::<()>().await,
+                                            }
+                                        } => {
+                                            warn!("Deepgram did not finish within 2s of input closing; releasing session");
+                                            break;
+                                        },
+                                        result = LiteStreamExt::next(&mut results) => result,
+                                    };
+                                    let Some(result) = result else { break; };
                                     let _token = _token.clone();
 
                                     if _token.is_cancelled() {
-                                        continue;
+                                        break;
                                     }
 
                                     match result {
-                                        Ok(result) => {
-                                            match result {
-                                                TranscriptResponse {
-                                                    duration,
-                                                    is_final,
-                                                    channel,
+                                        Ok(DeepgramEvent::Flux(response)) => {
+                                            match response {
+                                                FluxResponse::TurnInfo {
+                                                    event: TurnEvent::EndOfTurn,
+                                                    transcript,
+                                                    ..
                                                 } => {
-                                                    let mut transcript_responses =
-                                                        Vec::<TranscriptionResponse>::new();
-
-                                                    let first_alternative =
-                                                        &channel.alternatives.first().unwrap();
-                                                    for word in first_alternative.words.iter() {
-                                                        if word.confidence < 0.5 {
-                                                            transcript_responses.push(
-                                                                TranscriptionResponse {
-                                                                    speaker: None,
-                                                                    transcript: word.word.clone(),
-                                                                    ..Default::default()
-                                                                },
-                                                            );
-                                                        } else {
-                                                            if let Some(mut last) =
-                                                                transcript_responses.last_mut()
-                                                            {
-                                                                if word.speaker == last.speaker {
-                                                                    last.transcript += &(" "
-                                                                        .to_string()
-                                                                        + word.word.as_str());
-                                                                    continue;
-                                                                }
-                                                            }
-                                                            transcript_responses.push(
-                                                                TranscriptionResponse {
-                                                                    speaker: word.speaker.clone(),
-                                                                    transcript: word.word.clone(),
-                                                                    ..Default::default()
-                                                                },
-                                                            );
-                                                        }
-                                                    }
-
-                                                    //let transcript = first_alternative.transcript;
-                                                    //println!("Transcript: {:?}", transcript);
-
-                                                    for response in transcript_responses {
-                                                        //println!("[Speaker:{:?}] {:?}", response.speaker.unwrap(), response.transcript);
-                                                        async_tx.send(Ok(response.clone())).await;
+                                                    if !transcript.trim().is_empty() {
+                                                        async_tx.send(Ok(TranscriptionResponse {
+                                                            speaker: None,
+                                                            transcript,
+                                                            ..Default::default()
+                                                        })).await;
                                                     }
                                                 }
-                                                TerminalResponse {
-                                                    request_id,
-                                                    created,
-                                                    duration,
-                                                    channels,
-                                                } => {
-                                                    *is_terminated.lock().await = true;
-                                                    // Connection closed--will need to reconnect
-                                                    //async_tx.close().await;
-                                                    //break;
-                                                    info!("Deepgram connection terminated (ID: {})", request_id);
+                                                FluxResponse::TurnInfo { .. } => {}
+                                                FluxResponse::Connected { request_id, .. } => {
+                                                    info!("Deepgram Flux session ready (ID: {request_id})");
+                                                }
+                                                FluxResponse::FatalError { code, description, .. } => {
+                                                    warn!("Deepgram Flux fatal error {code}: {description}");
                                                     break;
                                                 }
+                                                FluxResponse::ConfigureSuccess { .. }
+                                                | FluxResponse::ConfigureFailure { .. }
+                                                | FluxResponse::Unknown(_) => {},
+                                                _ => {}
+                                            }
+                                        }
+                                        Ok(DeepgramEvent::Standard(response)) => {
+                                            match response {
+                                                StreamResponse::TranscriptResponse {
+                                                    is_final,
+                                                    speech_final,
+                                                    start,
+                                                    duration,
+                                                    channel,
+                                                    ..
+                                                } => {
+                                                    let Some(alternative) = channel.alternatives.first() else {
+                                                        continue;
+                                                    };
+                                                    if !alternative.transcript.trim().is_empty() {
+                                                        info!("Deepgram result: is_final={is_final}, speech_final={speech_final}, audio_end={:.3}s, session_elapsed={:?}",
+                                                            start + duration, connect_started.elapsed());
+                                                        if !is_final { continue; }
+                                                        async_tx.send(Ok(TranscriptionResponse {
+                                                            speaker: None,
+                                                            transcript: alternative.transcript.clone(),
+                                                            ..Default::default()
+                                                        })).await;
+                                                    }
+                                                }
+                                                StreamResponse::TerminalResponse { request_id, .. } => {
+                                                    info!("Deepgram session completed (ID: {request_id})");
+                                                    break;
+                                                }
+                                                _ => {}
                                             }
                                         }
                                         Err(err) => {
-                                            warn!("DEEPGRAM ERROR: {}", err.to_string())
+                                            warn!("Deepgram stream failed; reconnecting: {err}");
+                                            break;
                                         }
                                     }
                                 }
                             }
                             Err(err) => {
                                 warn!("Failed to get Deepgram transcription: {}", err);
-                                break;
+                                forward_task.abort();
+                                let _ = forward_task.await;
+                                tokio::select! {
+                                    _ = cancelled(&token) => break,
+                                    _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {},
+                                }
+                                continue;
                             }
                         }
+                        // Release the shared receiver even on EOF/error, not
+                        // only when a terminal metadata message was received.
+                        forward_task.abort();
+                        let _ = forward_task.await;
+                        info!("Deepgram stream ended; waiting for audio to reconnect");
                     }
                 }
             });
@@ -348,7 +450,7 @@ async fn main() -> Result<(), DeepgramError> {
         .start()
         .await?;
 
-    while let Some(result) = results.next().await {
+    while let Some(result) = futures::StreamExt::next(&mut results).await {
         println!("got: {:?}", result);
     }
 

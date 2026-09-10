@@ -39,6 +39,8 @@ impl ChatGPTRealtime {
     }
 
     pub async fn new(api_key: String) -> Self {
+        todo!()
+        /*
         let model = "gpt-4o-realtime-preview-2024-10-01".to_string();
 
         //let (stdin_tx, stdin_rx) = futures_channel::mpsc::unbounded();
@@ -164,6 +166,7 @@ impl ChatGPTRealtime {
             input_tx,
             output_rx,
         }
+        */
     }
 }
 

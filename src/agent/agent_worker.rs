@@ -12,6 +12,7 @@ use async_trait::async_trait;
 use crate::prelude::*;
 use futures::Stream;
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use std::*;
@@ -45,8 +46,19 @@ pub struct AgentWorker {
 pub struct TranscriberWorker {
     pub token: CancellationToken,
     pub input_tx: tokio::sync::broadcast::Sender<Bytes>,
-    audio_input: Option<AudioInput>
+    audio_input: Option<AudioInput>,
+    audio_input_task: Option<JoinHandle<()>>,
+    /// Opt-in bounded diagnostic history; snapshots do not consume STT audio.
+    pub audio_history: Option<delune::Replay>,
 }
+
+// Maximum read size, not a timer: short reads are forwarded immediately.
+const TRANSCRIBER_CHUNK_DURATION: Duration = Duration::from_millis(20);
+// This shared channel also accepts arbitrary-sized SpeakBytesEvent payloads.
+// Its capacity bounds message count, not total audio duration or end-to-end lag.
+const TRANSCRIBER_QUEUE_CHUNKS: usize = 64;
+const CONVERSATION_START_PROMPT: &str =
+    "A user has just connected to you. Start the conversation with a brief, warm greeting and an inviting question.";
 
 impl TranscriberWorker {
     pub async fn new(
@@ -67,7 +79,7 @@ impl TranscriberWorker {
         //let (output_tx, mut output_rx) = tokio::sync::broadcast::channel::<UserEvent>(32);
 
         let (transcriber_input_tx, transcriber_input_rx) =
-            tokio::sync::broadcast::channel::<Bytes>(64); //voice_transcription::channel();
+            tokio::sync::broadcast::channel::<Bytes>(TRANSCRIBER_QUEUE_CHUNKS);
 
         let token = CancellationToken::new();
 
@@ -130,12 +142,17 @@ impl TranscriberWorker {
         Self {
             token: token,
             input_tx: transcriber_input_tx,
-            audio_input: None
+            audio_input: None,
+            audio_input_task: None,
+            audio_history: None,
             //output_rx: output_rx
         }
     }
 
     pub fn set_audio_input(&mut self, audio_input: AudioInput) {
+        if let Some(task) = self.audio_input_task.take() {
+            task.abort();
+        }
         let input_tx = self.input_tx.clone();
         let _audio_input = audio_input.clone();
 
@@ -143,22 +160,43 @@ impl TranscriberWorker {
 
         info!("Starting audio input task for transcriber.");
 
-        tokio::task::spawn(async move {
-            let mut chunk = vec![0i16; _audio_input.get_format().get_samples_per_duration(Duration::from_millis(1000))];
+        use delune::{AudioSource, AudioSourceExt, AudioRead, encode_pcm16};
+        let source = _audio_input.into_source(TRANSCRIBER_CHUNK_DURATION)
+            .latest(Duration::from_millis(500))
+            .chunks(TRANSCRIBER_CHUNK_DURATION);
+        let mut source: Box<dyn AudioSource + Send> = if std::env::var_os("EMPATHIC_AUDIO_HISTORY").is_some() {
+            let (history, source) = source.replayable(Duration::from_secs(10));
+            self.audio_history = Some(history);
+            Box::new(source)
+        } else {
+            self.audio_history = None;
+            Box::new(source)
+        };
+        self.audio_input_task = Some(tokio::task::spawn(async move {
 
             loop {
-                if let Ok(count) = _audio_input.read(&mut chunk) && count > 0 {
+                let next = match source.read_chunk() {
+                    Ok(next) => next,
+                    Err(err) => { warn!("Microphone source failed: {err}"); break; }
+                };
+                if next == AudioRead::End { break; }
+                if let AudioRead::Ready(chunk) = next {
 
                     //info!("Got audio input!");
 
-                    chunk.truncate(count);
-
-                    input_tx.send(Bytes::from(convert_i16_to_16_bit_u8(&mut chunk).to_vec())).expect("Failed to send audio chunk to transcriber.");
+                    let bytes = Bytes::from(encode_pcm16(&chunk));
+                    if input_tx.send(bytes).is_err() {
+                        warn!("Transcriber input receiver closed; stopping audio input task");
+                        break;
+                    }
+                    // Drain bursts without imposing a sleep after every read.
+                    tokio::task::yield_now().await;
+                    continue;
                 }
                 tokio::time::sleep(Duration::from_millis(5)).await;
             }
 
-        });
+        }));
     }
 
     pub fn send(&mut self, bytes: Vec<u8>) -> Result<()> {
@@ -171,6 +209,15 @@ impl TranscriberWorker {
     //    let ev = self.output_rx.try_recv()?;
     //    Ok(ev)
     //}
+}
+
+impl Drop for TranscriberWorker {
+    fn drop(&mut self) {
+        self.token.cancel();
+        if let Some(task) = self.audio_input_task.take() {
+            task.abort();
+        }
+    }
 }
 
 struct ChatCompletionResponseWorker {
@@ -409,8 +456,8 @@ impl ChatCompletionResponseWorker {
                 event_type,
             );
             info!(
-                "[{}] Generated response: {}",
-                self.config.name, args_description
+                "[{}] Generated response: {}({})",
+                self.config.name, name, args_description
             );
 
             self.output_tx.send(ev.clone())?;
@@ -453,8 +500,7 @@ impl ChatCompletionResponseWorker {
         }
 
         let dangling_speech_text = speech_text
-            .substring(processed_speech.len(), speech_text.len())
-            .trim();
+            .substring(processed_speech.len(), speech_text.len());
 
         args[length - 1] = dangling_speech_text.to_string();
 
@@ -678,6 +724,18 @@ pub struct AgentState {
 }
 
 impl AgentWorker {
+    pub async fn start_conversation(&self, space_id: Id) -> Result<()> {
+        let mut state = self.state.lock().await;
+        state.primary_space_id = space_id.clone();
+
+        state.new_message(
+            space_id.clone(),
+            MessageRole::system,
+            Content::Text(CONVERSATION_START_PROMPT.to_string()),
+        );
+        state.get_chat_completion_response(space_id).await
+    }
+
     pub async fn new(user_id: Id, primary_space_id: Id, config: AgentConfig) -> Self {
         let mut functions = Vec::<Function>::new();
 
@@ -689,7 +747,7 @@ impl AgentWorker {
             .values()
             .map(|x| x.to_owned())
             .collect();
-        let system_prompt = config.description.clone();
+        //let system_prompt = config.description.clone();
 
         let (input_tx, mut input_rx) = tokio::sync::broadcast::channel::<UserEvent>(512);
         let (output_tx, mut output_rx) = tokio::sync::broadcast::channel::<UserEvent>(512);
@@ -829,7 +887,7 @@ impl AgentWorker {
                         if is_running {
                             _state.lock().await.new_message(
                                 _space_id.clone(),
-                                Role::Agent,
+                                MessageRole::assistant,
                                 Content::Text(ev.text.clone()),
                             );
 
@@ -1042,11 +1100,15 @@ impl AgentWorker {
                             let _output_tx = output_tx.clone();
                             let _user_id = user_id.clone();
                             tokio::spawn(async move {
-                                let song_name = ev.song_name.replace(" ", "_").to_string();
-                                println!("SINGING SONG: {}", song_name.clone());
+                                let song_name = ev.song_name.replace(" ", "_");
+                                let song_name = Path::new(&song_name)
+                                    .file_stem()
+                                    .and_then(|name| name.to_str())
+                                    .unwrap_or(&song_name);
+                                info!("Singing song: {}", song_name);
 
                                 let mut receiver = delune::read_wav_chunks(
-                                    format!("assets/songs/{}_anatra.wav", song_name.clone()),
+                                    format!("assets/songs/anatra/{}.wav", song_name),
                                     Duration::from_millis(500),
                                     AudioFormat::new(16000, 1, 16),
                                 )
@@ -1066,7 +1128,7 @@ impl AgentWorker {
                                         ))
                                         .unwrap();
                                 }
-                                println!("Done playing song.");
+                                info!("Done playing song.");
                             });
                         }
                     }
@@ -1181,7 +1243,7 @@ impl AgentState {
             //let sx = sx.clone();
 
             //let prompt_text = prompt_text;
-            self.new_message(space_id.clone(), Role::Human, content);
+            self.new_message(space_id.clone(), MessageRole::user, content);
             if !is_image {
                 self.get_chat_completion_response(space_id).await?;
             }
@@ -1265,13 +1327,8 @@ impl AgentState {
         Ok(())
     }
 
-    fn new_message(&mut self, space_id: Id, role: Role, content: Content) {
+    fn new_message(&mut self, space_id: Id, role: MessageRole, content: Content) {
         let mut messages = self.get_messages(&space_id);
-
-        let role = match role {
-            Role::Agent => MessageRole::assistant,
-            Role::Human => MessageRole::user,
-        };
 
         match content.clone() {
             Content::Text(text) => {

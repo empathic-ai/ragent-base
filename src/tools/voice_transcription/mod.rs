@@ -47,7 +47,7 @@ pub trait Transcriber: Send + Sync {
 
 #[derive(Clone, Default)]
 pub struct TranscriptionResponse {
-    pub speaker: Option<u32>,
+    pub speaker: Option<i32>,
     pub transcript: String,
     pub estimated_cost: Decimal
 }

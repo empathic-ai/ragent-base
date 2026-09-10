@@ -1,3 +1,5 @@
+use std::path::Path;
+
 #[cfg(feature = "bevy")]
 use bevy::prelude::*;
 #[cfg(feature = "bevy_reflect")]
@@ -62,6 +64,26 @@ pub struct EmoteEvent {
 pub struct SingEvent {
     pub song_name: String,
 }
+
+pub fn get_sing_event_prompt() -> String {
+    let path = Path::new("assets/songs/anatra");
+
+    let song_names: Vec<String> = std::fs::read_dir(path)
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|e| e.path().is_file())
+        .filter(|e| e.path().extension().is_some_and(|extension| extension == "wav"))
+        .filter_map(|e| e.path().file_stem().and_then(|name| name.to_str()).map(String::from))
+        .collect();
+
+    let song_names: String = song_names.iter()
+        .map(|s| format!(r#""{}""#, s))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    format!("# The following songs are available: {}.", song_names)
+}
+
 /// Puts the agent to sleep. Call this function if a user requests the agent to be turned off.
 #[derive(Reflect, Reactive, ragent_derive::Task, documented::Documented)]
 #[cfg_attr(feature = "bevy", derive(Event))]
