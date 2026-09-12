@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::PathBuf;
 
 #[cfg(feature = "bevy")]
 use bevy::prelude::*;
@@ -65,16 +65,32 @@ pub struct SingEvent {
     pub song_name: String,
 }
 
-pub fn get_sing_event_prompt() -> String {
-    let path = Path::new("assets/songs/anatra");
+pub fn user_directory(user_id: &Id) -> PathBuf {
+    PathBuf::from("assets")
+        .join("users")
+        .join(user_id.to_pretty_string())
+}
 
-    let song_names: Vec<String> = std::fs::read_dir(path)
-        .unwrap()
-        .filter_map(Result::ok)
+pub fn user_songs_directory(user_id: &Id) -> PathBuf {
+    user_directory(user_id).join("songs")
+}
+
+pub fn user_voice_lines_directory(user_id: &Id) -> PathBuf {
+    user_directory(user_id).join("voice-lines")
+}
+
+pub fn get_sing_event_prompt(agent_id: &Id) -> String {
+    let path = user_songs_directory(agent_id);
+
+    let mut song_names: Vec<String> = std::fs::read_dir(path)
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| entry.ok())
         .filter(|e| e.path().is_file())
         .filter(|e| e.path().extension().is_some_and(|extension| extension == "wav"))
         .filter_map(|e| e.path().file_stem().and_then(|name| name.to_str()).map(String::from))
         .collect();
+    song_names.sort_unstable();
 
     let song_names: String = song_names.iter()
         .map(|s| format!(r#""{}""#, s))

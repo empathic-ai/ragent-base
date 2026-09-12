@@ -54,7 +54,8 @@ impl Synthesizer for ElevenLabsSynthesizer {
         let _permit = self.semaphore.acquire().await?;
 
         let client = reqwest::ClientBuilder::new().build()?;
-        let voice_id = VOICE_ID_BY_NAME.get(&voice_name).unwrap();
+        let voice_id = VOICE_ID_BY_NAME.get(&voice_name)
+            .ok_or_else(|| anyhow!("Unknown ElevenLabs voice alias: {}", voice_name))?;
         let api_key = self.api_key.clone();
 
         let mut headers = HeaderMap::new();

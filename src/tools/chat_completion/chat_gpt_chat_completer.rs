@@ -78,7 +78,7 @@ impl ChatCompleter for ChatGPTChatCompleter {
         // TODO: Uncomment and use is_function_model() if built-in functions are preferable
         let is_function_model = false;//Self::is_function_model(model_name.clone());
 
-        if !is_function_model {
+        if !is_function_model && !task_configs.is_empty() {
             let function_prompt = super::get_function_prompt(task_configs.clone());
             messages.insert(0,  openai_api_rs::v1::chat_completion::ChatCompletionMessage {
                 role:  openai_api_rs::v1::chat_completion::MessageRole::system,

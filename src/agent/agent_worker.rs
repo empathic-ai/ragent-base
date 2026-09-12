@@ -1108,7 +1108,10 @@ impl AgentWorker {
                                 info!("Singing song: {}", song_name);
 
                                 let mut receiver = delune::read_wav_chunks(
-                                    format!("assets/songs/anatra/{}.wav", song_name),
+                                    user_songs_directory(&user_id)
+                                        .join(format!("{song_name}.wav"))
+                                        .to_string_lossy()
+                                        .into_owned(),
                                     Duration::from_millis(500),
                                     AudioFormat::new(16000, 1, 16),
                                 )
