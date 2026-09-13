@@ -132,7 +132,7 @@ impl SpeakerPipeline {
                                         let _ = events.try_send(Ok(event));
                                     }
                                     _ => {
-                                        identity.reset();
+                                        identity.abstain();
                                         let _ = events.try_send(Ok(fallback));
                                         let _ = events.try_send(Err(anyhow!(
                                             "speaker recognition failed or timed out"

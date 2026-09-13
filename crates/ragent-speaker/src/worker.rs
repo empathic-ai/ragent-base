@@ -79,14 +79,19 @@ impl IdentitySession {
         &self.profiles
     }
     pub fn reset(&mut self) {
-        self.fusion.reset();
+        self.abstain();
         self.last_label_session = None;
-        self.turn_labels.clear();
-        self.pending_hint = None;
-        self.unknown.clear();
         self.seen.clear();
         self.last_end = None;
         self.session = None;
+    }
+    /// Discard uncertain identity evidence without allowing consumed audio to
+    /// be submitted again. Only a source/session reset clears replay tracking.
+    pub(crate) fn abstain(&mut self) {
+        self.fusion.reset();
+        self.turn_labels.clear();
+        self.pending_hint = None;
+        self.unknown.clear();
     }
     pub fn proximity(&mut self, user: &str, value: ProximityBucket) {
         if self.profiles.iter().any(|p| p.user_id == user) {
@@ -133,7 +138,11 @@ impl IdentitySession {
         {
             self.reset();
         }
-        self.last_label_session = label_session;
+        // An unlabeled turn is not a new connection. Remember the last known
+        // namespace so a later reconnect still resets enrollment and hints.
+        if label_session.is_some() {
+            self.last_label_session = label_session;
+        }
         self.session = Some(turn.source_session.clone());
         let evidence_id = format!(
             "{}:{}:{}",

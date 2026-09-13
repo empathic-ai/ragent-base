@@ -308,3 +308,90 @@ fn split_multi_speaker_transcript_preserves_unknown_overlap() {
     assert_eq!(parts[0].1, Some(label("a")));
     assert_eq!(parts[1].1, Some(label("b")));
 }
+
+#[tokio::test]
+async fn unlabeled_turn_does_not_hide_diarizer_session_change() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut session = IdentitySession::new(
+        Arc::new(EmbeddingRecognizer {
+            embedder: Arc::new(Embed),
+        }),
+        Arc::new(FileProfileStore::new(dir.path(), "session-reset")),
+        FusionConfig::default(),
+    )
+    .await
+    .unwrap();
+    assert!(
+        session
+            .resolve(turn("old", 0, 4))
+            .await
+            .unwrap()
+            .enrollment_candidate
+            .is_none()
+    );
+    let mut unlabeled = turn("gap", 64000, 1);
+    unlabeled.label = None;
+    session.resolve(unlabeled).await.unwrap();
+    let mut reconnected = turn("new", 80000, 4);
+    reconnected.label.as_mut().unwrap().session = "new-connection".into();
+    assert!(
+        session
+            .resolve(reconnected)
+            .await
+            .unwrap()
+            .enrollment_candidate
+            .is_none(),
+        "enrollment audio must not accumulate across diarizer connections"
+    );
+}
+
+#[tokio::test]
+async fn rejected_pipeline_turn_cannot_clear_replay_protection() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut identity = IdentitySession::new(
+        Arc::new(EmbeddingRecognizer {
+            embedder: Arc::new(Embed),
+        }),
+        Arc::new(FileProfileStore::new(dir.path(), "replay")),
+        FusionConfig::default(),
+    )
+    .await
+    .unwrap();
+    identity.enroll_sample("alice", &audio(8)).await.unwrap();
+    let (pipeline, mut output) = SpeakerPipeline::start(identity, None).unwrap();
+    for start in [0, 16000] {
+        pipeline
+            .push_audio(AudioFrame {
+                start_sample: start,
+                pcm16: vec![10; 32000].into(),
+            })
+            .unwrap();
+    }
+    for attempt in 0..3 {
+        pipeline
+            .submit(TranscriptTurn {
+                utterance_id: "same-turn".into(),
+                source_session: "source".into(),
+                span: SampleSpan::new(0, 32000).unwrap(),
+                label: Some(label("0")),
+            })
+            .unwrap();
+        let event = tokio::time::timeout(Duration::from_secs(1), async {
+            loop {
+                if let Ok(event) = output.recv().await.unwrap() {
+                    break event;
+                }
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            event.resolution.confidence,
+            if attempt == 0 {
+                IdentityConfidence::Medium
+            } else {
+                IdentityConfidence::Unknown
+            }
+        );
+    }
+}
