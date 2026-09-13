@@ -8,12 +8,14 @@ pub(super) fn standard_request(
     dg: &Deepgram,
     model: Model,
     sample_rate: u32,
+    diarize: bool,
 ) -> WebsocketBuilder<'_> {
     dg.transcription()
         .stream_request_with_options(
             Options::builder()
                 .model(model)
                 .detect_language(DetectLanguage::Disabled)
+                .diarize(diarize)
                 .build(),
         )
         .encoding(Encoding::Linear16)
@@ -74,7 +76,7 @@ mod tests {
         let dg = Deepgram::with_base_url_and_api_key(base_url.as_str(), "test").unwrap();
         let (mut audio_tx, audio_rx) =
             futures::channel::mpsc::channel::<Result<_, std::io::Error>>(16);
-        let mut results = standard_request(&dg, Model::Nova3, 16000)
+        let mut results = standard_request(&dg, Model::Nova3, 16000, true)
             .stream(audio_rx)
             .await
             .unwrap();

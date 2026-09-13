@@ -47,7 +47,18 @@ pub trait Transcriber: Send + Sync {
 
 #[derive(Clone, Default)]
 pub struct TranscriptionResponse {
+    /// Deprecated numeric Deepgram label. Use `diarization_label` for new code.
     pub speaker: Option<i32>,
+    /// Provider-scoped, session-local speaker label; never a durable identity.
+    pub diarization_label: Option<String>,
+    /// Unique connection id. Labels and relative timestamps reset on reconnect.
+    pub session_id: Option<String>,
+    /// Offset into the input PCM sample clock; None after unknown-duration loss.
+    pub stream_start_sample: Option<u64>,
     pub transcript: String,
-    pub estimated_cost: Decimal
+    pub estimated_cost: Decimal,
+    pub start_seconds: Option<f64>,
+    pub end_seconds: Option<f64>,
+    pub is_final: bool,
+    pub speech_final: bool,
 }

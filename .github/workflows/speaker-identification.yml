@@ -1,0 +1,19 @@
+name: Speaker identification
+on:
+  pull_request:
+    paths:
+      - 'crates/ragent-speaker/**'
+      - '.github/workflows/speaker-identification.yml'
+  push:
+    branches: [main]
+    paths: ['crates/ragent-speaker/**']
+permissions:
+  contents: read
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --manifest-path crates/ragent-speaker/Cargo.toml --locked --all-features
+      - run: cargo test --manifest-path crates/ragent-speaker/Cargo.toml --locked --no-default-features
