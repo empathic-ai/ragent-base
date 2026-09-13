@@ -26,6 +26,9 @@ futures = ["dep:futures", "futures-util", "futures-lite", "async-channel"]
 prost = ["dep:prost", "dep:prost-build"]
 openai = ["openai-api-rs"]
 deepgram = ["dep:deepgram"]
+speaker-identification = ["tokio", "futures", "dep:ragent-speaker"]
+pyannote = ["speaker-identification", "ragent-speaker/pyannote"]
+polyvoice = ["speaker-identification", "ragent-speaker/polyvoice"]
 
 [dependencies]
 log = { version = "0.4.20", features = ["max_level_debug", "release_max_level_warn"] }
@@ -52,6 +55,7 @@ bytes = "1.5.0"
 common = { git = "https://github.com/empathic-ai/common.git", default-features = false }
 dyn-clone = "1.0.17"
 ringbuf = "0.4.1"
+
 
 [target.'cfg(not(target_arch = "xtensa"))'.dependencies]
 # Removed feature due to web compatibility issues: "jpeg"
@@ -85,6 +89,7 @@ byteorder = "1.5.0"
 symphonia = { version = "0.5.4", default-features = false, optional = true }
 
 [target.'cfg(all(not(target_arch = "xtensa"), not(target_arch = "wasm32"), not(target_os = "android")))'.dependencies]
+ragent-speaker = { path = "crates/ragent-speaker", optional = true }
 openai-api-rs = { version = "10.0.1", optional = true }
 # openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git", optional = true }
 deepgram = { git = "https://github.com/empathic-ai/deepgram-rust-sdk.git", optional = true }

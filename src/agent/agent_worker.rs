@@ -48,6 +48,7 @@ pub struct TranscriberWorker {
     pub input_tx: tokio::sync::broadcast::Sender<Bytes>,
     audio_input: Option<AudioInput>,
     audio_input_task: Option<JoinHandle<()>>,
+    worker_tasks: Vec<JoinHandle<()>>,
     /// Opt-in bounded diagnostic history; snapshots do not consume STT audio.
     pub audio_history: Option<delune::Replay>,
 }
@@ -61,6 +62,10 @@ const CONVERSATION_START_PROMPT: &str =
     "A user has just connected to you. Start the conversation with a brief, warm greeting and an inviting question.";
 
 impl TranscriberWorker {
+    #[cfg(all(feature = "speaker-identification", not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android"))))]
+    pub(crate) fn from_speaker_parts(token: CancellationToken, input_tx: tokio::sync::broadcast::Sender<Bytes>, worker_tasks: Vec<JoinHandle<()>>) -> Self {
+        Self { token, input_tx, worker_tasks, audio_input: None, audio_input_task: None, audio_history: None }
+    }
     pub async fn new(
         space_id: Id,
         user_id: Option<Id>,
@@ -106,11 +111,9 @@ impl TranscriberWorker {
                         if !ev.transcript.trim_start().trim_end().is_empty() {
                             //println!("Sending transcription result to agent!");
 
-                            let speaker = if let Some(speaker) = ev.speaker {
-                                &speaker.to_string()
-                            } else {
-                                "Uknown"
-                            };
+                            let speaker = ev.diarization_label.clone()
+                                .or_else(|| ev.speaker.map(|speaker| speaker.to_string()))
+                                .unwrap_or_else(|| "Unknown".to_string());
 
                             let text = if user_id.is_none() {
                                 format!("[Speaker:{}] {}", speaker, ev.transcript)
@@ -144,6 +147,7 @@ impl TranscriberWorker {
             input_tx: transcriber_input_tx,
             audio_input: None,
             audio_input_task: None,
+            worker_tasks: Vec::new(),
             audio_history: None,
             //output_rx: output_rx
         }
@@ -214,6 +218,7 @@ impl TranscriberWorker {
 impl Drop for TranscriberWorker {
     fn drop(&mut self) {
         self.token.cancel();
+        for task in self.worker_tasks.drain(..) { task.abort(); }
         if let Some(task) = self.audio_input_task.take() {
             task.abort();
         }
@@ -633,6 +638,8 @@ impl SpaceWorker {
 }
 
 pub struct SpaceState {
+    #[cfg(all(feature = "speaker-identification", not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android"))))]
+    pub speaker_pipeline: Option<SpeakerPipeline>,
     pub space_id: Id,
     pub token: CancellationToken,
     pub space_transcriber: TranscriberWorker,
@@ -651,6 +658,8 @@ impl SpaceState {
         let token = CancellationToken::new();
 
         Self {
+            #[cfg(all(feature = "speaker-identification", not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android"))))]
+            speaker_pipeline: None,
             space_id: space_id.clone(),
             token: token,
             space_transcriber: bevy::tasks::block_on(Compat::new(TranscriberWorker::new(
@@ -1164,7 +1173,24 @@ impl AgentState {
         let user_id = self.get_user_id();
         let ev_user_id = &user_ev.user_id;
 
-        if ev_user_id.as_ref().unwrap() == &user_id {
+        if ev_user_id.as_ref() == Some(&user_id) {
+            return Ok(());
+        }
+
+        #[cfg(all(feature = "speaker-identification", not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android"))))]
+        if let Some(ev) = SpeakerResolvedEvent::from_dynamic(&user_ev.ev) {
+            // Append a fresh annotation; do not rewrite old messages or trigger
+            // another LLM reply merely because recognition finished later.
+            if ev.confidence == "high" {
+                if let Some(id) = ev.user_id {
+                    self.get_messages(&user_ev.space_id).push(ChatCompletionMessage {
+                        name: None, role: MessageRole::user, function_call: None,
+                        content: Content::Text(format!(
+                            "[Speaker annotation for utterance {}, samples {}..{}: enrolled user {}]",
+                            ev.utterance_id, ev.start_sample, ev.end_sample, id)),
+                    });
+                }
+            }
             return Ok(());
         }
 

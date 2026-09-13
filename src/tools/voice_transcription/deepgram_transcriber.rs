@@ -37,6 +37,7 @@ use common::prelude::*;
 
 pub struct DeepgramTranscriber {
     languages: Vec<String>,
+    diarize: bool,
 }
 
 enum DeepgramEvent {
@@ -59,9 +60,11 @@ async fn cancelled(token: &CancellationToken) {
 }
 
 impl DeepgramTranscriber {
+    pub fn with_diarization(mut self, enabled: bool) -> Self { self.diarize = enabled; self }
     pub fn new_from_env() -> Self {
         DeepgramTranscriber {
             languages: vec!["en".to_string()],
+            diarize: true,
         }
     }
 }
@@ -74,6 +77,7 @@ impl Transcriber for DeepgramTranscriber {
         stream: Receiver<Bytes>,
         token: CancellationToken,
     ) -> Result<mpsc::UnboundedReceiver<Result<TranscriptionResponse>>> {
+        let diarize = self.diarize;
         // If only one language is supported, use Deepgram's streaming mode (which don't support language detection)
         // Otherwise, use Deepgram's non-streaming mode
         if self.languages.len() == 1 {
@@ -81,6 +85,8 @@ impl Transcriber for DeepgramTranscriber {
             let (mut async_tx, async_rx) = mpsc::unbounded::<Result<TranscriptionResponse>>();
 
             let stream = Arc::new(Mutex::new(stream));
+            let clock = Arc::new(std::sync::atomic::AtomicU64::new(0));
+            let clock_valid = Arc::new(std::sync::atomic::AtomicBool::new(true));
 
             //println!("Getting Deepgram stream...");
             let _token = token.clone();
@@ -100,11 +106,17 @@ impl Transcriber for DeepgramTranscriber {
                     };
                     if matches!(item, Err(broadcast::error::RecvError::Closed)) { break; }
                     if let Err(broadcast::error::RecvError::Lagged(n)) = item {
+                        clock_valid.store(false, std::sync::atomic::Ordering::SeqCst);
                         warn!("Transcription stream lagged while reconnecting, dropped {n} chunks");
                         continue;
                     }
 
                     if let Ok(item) = item {
+                        let session_id = uuid::Uuid::new_v4().to_string();
+                        let stream_start = clock.fetch_add(item.len() as u64 / 2, std::sync::atomic::Ordering::SeqCst);
+                        if item.len() % 2 != 0 { clock_valid.store(false, std::sync::atomic::Ordering::SeqCst); }
+                        let forward_clock = clock.clone();
+                        let forward_valid = clock_valid.clone();
                         //println!("GOT VOICE DATA ITEM!");
                         let (mut forward_tx, mut forward_rx) = mpsc::channel::<std::result::Result<Bytes, deepgram::DeepgramError>>(16);
 
@@ -141,6 +153,8 @@ impl Transcriber for DeepgramTranscriber {
                                             break;
                                         }
 
+                                        forward_clock.fetch_add(item.len() as u64 / 2, std::sync::atomic::Ordering::SeqCst);
+                                        if item.len() % 2 != 0 { forward_valid.store(false, std::sync::atomic::Ordering::SeqCst); }
                                         forwarded_bytes += item.len();
                                         let sent = tokio::select! {
                                             _ = cancelled(&_token) => break,
@@ -163,6 +177,7 @@ impl Transcriber for DeepgramTranscriber {
                                         }
                                     }
                                     Err(broadcast::error::RecvError::Lagged(n)) => {
+                                        forward_valid.store(false, std::sync::atomic::Ordering::SeqCst);
                                         warn!("Transcription stream lagged, dropped {n} chunks — continuing");
                                         continue;
                                     }
@@ -193,7 +208,7 @@ impl Transcriber for DeepgramTranscriber {
                                     Box::pin(LiteStreamExt::map(results, |result| result.map(DeepgramEvent::Flux))),
                                 )
                             } else {
-                                let results = stream_config::standard_request(&dg, standard_model, sample_rate)
+                                let results = stream_config::standard_request(&dg, standard_model, sample_rate, diarize)
                                     .stream(forward_rx)
                                     .await?;
                                 Ok::<Boxed<std::result::Result<DeepgramEvent, DeepgramError>>, DeepgramError>(
@@ -260,6 +275,8 @@ impl Transcriber for DeepgramTranscriber {
                                                         async_tx.send(Ok(TranscriptionResponse {
                                                             speaker: None,
                                                             transcript,
+                                                            is_final: true,
+                                                            speech_final: true,
                                                             ..Default::default()
                                                         })).await;
                                                     }
@@ -295,11 +312,35 @@ impl Transcriber for DeepgramTranscriber {
                                                         info!("Deepgram result: is_final={is_final}, speech_final={speech_final}, audio_end={:.3}s, session_elapsed={:?}",
                                                             start + duration, connect_started.elapsed());
                                                         if !is_final { continue; }
-                                                        async_tx.send(Ok(TranscriptionResponse {
-                                                            speaker: None,
-                                                            transcript: alternative.transcript.clone(),
-                                                            ..Default::default()
-                                                        })).await;
+                                                        let grouped = group_words_by_speaker(&alternative.words);
+                                                        if grouped.is_empty() {
+                                                            async_tx.send(Ok(TranscriptionResponse {
+                                                                session_id: Some(session_id.clone()),
+                                                                stream_start_sample: clock_valid.load(std::sync::atomic::Ordering::SeqCst).then_some(stream_start),
+                                                                transcript: alternative.transcript.clone(),
+                                                                start_seconds: Some(start),
+                                                                end_seconds: Some(start + duration),
+                                                                is_final,
+                                                                speech_final,
+                                                                ..Default::default()
+                                                            })).await;
+                                                        } else {
+                                                            let group_count = grouped.len();
+                                                            for (index, group) in grouped.into_iter().enumerate() {
+                                                                async_tx.send(Ok(TranscriptionResponse {
+                                                                    session_id: Some(session_id.clone()),
+                                                                    stream_start_sample: clock_valid.load(std::sync::atomic::Ordering::SeqCst).then_some(stream_start),
+                                                                    speaker: group.speaker,
+                                                                    diarization_label: group.speaker.map(|speaker| speaker.to_string()),
+                                                                    transcript: group.text,
+                                                                    start_seconds: Some(group.start),
+                                                                    end_seconds: Some(group.end),
+                                                                    is_final,
+                                                                    speech_final: speech_final && index + 1 == group_count,
+                                                                    ..Default::default()
+                                                                })).await;
+                                                            }
+                                                        }
                                                     }
                                                 }
                                                 StreamResponse::TerminalResponse { request_id, .. } => {
@@ -349,6 +390,33 @@ impl Transcriber for DeepgramTranscriber {
              */
         }
     }
+}
+
+struct SpeakerWordGroup {
+    speaker: Option<i32>,
+    text: String,
+    start: f64,
+    end: f64,
+}
+
+fn group_words_by_speaker(words: &[deepgram::common::stream_response::Word]) -> Vec<SpeakerWordGroup> {
+    let mut groups = Vec::<SpeakerWordGroup>::new();
+    for word in words {
+        let text = word.punctuated_word.as_deref().unwrap_or(&word.word);
+        if let Some(group) = groups.last_mut().filter(|group| group.speaker == word.speaker) {
+            group.text.push(' ');
+            group.text.push_str(text);
+            group.end = word.end;
+        } else {
+            groups.push(SpeakerWordGroup {
+                speaker: word.speaker,
+                text: text.to_string(),
+                start: word.start,
+                end: word.end,
+            });
+        }
+    }
+    groups
 }
 
 /*

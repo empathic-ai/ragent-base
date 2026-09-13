@@ -1,0 +1,31 @@
+[package]
+name = "ragent-speaker"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Timed speaker evidence, identity fusion and optional speaker providers for Ragent"
+
+
+[features]
+default = []
+pyannote = ["dep:reqwest", "dep:tokio-tungstenite", "dep:futures-util"]
+polyvoice = ["dep:polyvoice"]
+
+[dependencies]
+anyhow = "1"
+async-trait = "0.1"
+bytes = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["sync", "rt", "macros", "time", "fs", "io-util"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+sha2 = "0.10"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"], optional = true }
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"], optional = true }
+futures-util = { version = "0.3", features = ["sink"], optional = true }
+polyvoice = { version = "=0.19.0", default-features = false, features = ["embedder-native"], optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "net", "test-util"] }
+tempfile = "3"
