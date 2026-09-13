@@ -1,4 +1,4 @@
-use crate::{VoiceProfile, VoiceTemplate, unit_vector};
+use super::{VoiceProfile, VoiceTemplate, unit_vector};
 use anyhow::{Result, ensure};
 use async_trait::async_trait;
 use sha2::{Digest, Sha256};

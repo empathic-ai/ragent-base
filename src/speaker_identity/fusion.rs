@@ -1,10 +1,12 @@
-use crate::{SpeakerLabel, VoiceEvidence};
+use super::{SpeakerLabel, VoiceEvidence};
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     time::{Duration, Instant},
 };
+
+pub(crate) const CONTINUITY_WINDOW: Duration = Duration::from_secs(20);
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -199,7 +201,7 @@ impl FusionState {
             .map(|(p, _)| p.score())
             .unwrap_or(0.);
         if let Some((id, embedding, old_label, at)) = &self.previous {
-            if id == &best.user_id && now.saturating_duration_since(*at) < Duration::from_secs(20) {
+            if id == &best.user_id && now.saturating_duration_since(*at) < CONTINUITY_WINDOW {
                 if label.is_some() && old_label.as_ref() == label {
                     bonus += 0.01;
                 }
@@ -241,7 +243,7 @@ impl FusionState {
             match &self.consecutive {
                 Some((id, n, at))
                     if id == &best.user_id
-                        && now.saturating_duration_since(*at) < Duration::from_secs(20) =>
+                        && now.saturating_duration_since(*at) < CONTINUITY_WINDOW =>
                 {
                     n.saturating_add(1)
                 }

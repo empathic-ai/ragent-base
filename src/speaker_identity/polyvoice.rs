@@ -1,4 +1,4 @@
-use crate::{SpeakerAudio, SpeakerEmbedder};
+use super::{SpeakerAudio, SpeakerEmbedder};
 use ::polyvoice::{Embedder, ResNet34Native};
 use anyhow::{Result, ensure};
 use async_trait::async_trait;

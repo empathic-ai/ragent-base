@@ -1,4 +1,4 @@
-use crate::*;
+use super::*;
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -153,6 +153,13 @@ impl IdentitySession {
             self.last_end.is_none_or(|end| turn.span.start >= end),
             "overlapping or out-of-order identity evidence"
         );
+        // Queued inference can process distant recordings back-to-back. Do not
+        // let processing speed hide a source gap beyond the continuity window.
+        if self.last_end.is_some_and(|end| {
+            turn.span.start - end >= CONTINUITY_WINDOW.as_secs() * SAMPLE_RATE as u64
+        }) {
+            self.abstain();
+        }
         self.last_end = Some(turn.span.end);
         if self.seen.len() == 1024 {
             self.seen.pop_front();

@@ -1,4 +1,4 @@
-use crate::{MAX_CLIP_SAMPLES, SAMPLE_RATE, SpeakerAudio};
+use super::{MAX_CLIP_SAMPLES, SAMPLE_RATE, SpeakerAudio};
 use anyhow::{Result, ensure};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
@@ -127,8 +127,8 @@ impl AudioTimeline {
 /// speaker overlaps it. Silence/uncovered words stay unknown.
 pub fn label_span(
     span: SampleSpan,
-    segments: &[crate::DiarizationSegment],
-) -> Option<crate::SpeakerLabel> {
+    segments: &[super::DiarizationSegment],
+) -> Option<super::SpeakerLabel> {
     let matching: Vec<_> = segments
         .iter()
         .filter(|s| s.span.overlap(span) > 0)
@@ -156,8 +156,8 @@ pub fn label_span(
 /// The text remains one utterance; annotations identify its audio ranges.
 pub fn split_speaker_span(
     span: SampleSpan,
-    segments: &[crate::DiarizationSegment],
-) -> Vec<(SampleSpan, Option<crate::SpeakerLabel>)> {
+    segments: &[super::DiarizationSegment],
+) -> Vec<(SampleSpan, Option<super::SpeakerLabel>)> {
     if let Some(label) = label_span(span, segments) {
         return vec![(span, Some(label))];
     }
@@ -168,7 +168,7 @@ pub fn split_speaker_span(
     }
     boundaries.sort_unstable();
     boundaries.dedup();
-    let mut result: Vec<(SampleSpan, Option<crate::SpeakerLabel>)> = vec![];
+    let mut result: Vec<(SampleSpan, Option<super::SpeakerLabel>)> = vec![];
     for window in boundaries.windows(2) {
         let piece = SampleSpan {
             start: window[0],

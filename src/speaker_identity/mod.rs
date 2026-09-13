@@ -208,3 +208,11 @@ impl fmt::Debug for VoiceEvidence {
             .finish()
     }
 }
+
+#[cfg(feature = "bevy")]
+mod integration;
+#[cfg(feature = "bevy")]
+pub use integration::*;
+
+#[cfg(test)]
+mod tests;

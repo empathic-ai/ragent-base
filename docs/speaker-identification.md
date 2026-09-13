@@ -61,7 +61,9 @@ implement those ASR backends.
 
 Deepgram exposes final contiguous word-speaker groups, preserves punctuation,
 and advances the source sample clock across reconnects. ASR connection IDs reset
-identity continuity. Broadcast lag invalidates identity timing until that
+identity continuity. Source gaps of 20 seconds or more discard temporal evidence
+even when queued turns are processed back-to-back. Rejected or failed turns
+discard uncertain identity evidence while retaining replay protection. Broadcast lag invalidates identity timing until that
 transcriber is replaced. A source that drops/resamples audio before this worker
 must expose a new source epoch; do not join timestamps from different clocks.
 
@@ -122,23 +124,29 @@ TTL; it does not infer a person from an arbitrary BLE address.
 
 ## Validation
 
-Run the independent core suite without service credentials:
+Speaker identity is a module of the existing `ragent` package at
+`src/speaker_identity`; it does not add a Cargo package. The Bevy adapter is
+compiled with the normal integration features. For provider-neutral unit tests,
+Flux is enabled only by its existing Bevy/reflection features.
+
+Run the in-crate speaker suite without service credentials:
 
 ```sh
-cargo test --manifest-path crates/ragent-speaker/Cargo.toml --locked --all-features
-cargo test --manifest-path crates/ragent-speaker/Cargo.toml --locked --no-default-features
+cargo test --lib --no-default-features --features speaker-identification,polyvoice,pyannote speaker_identity::
+cargo test --lib --no-default-features --features speaker-identification speaker_identity::
 ```
 
 Tests cover identity switching/unknowns, ambiguity, invalid scores, time decay,
 model/session isolation, audio gaps, multi-speaker ranges, overlap abstention,
-explicit enrollment/reload/deletion, bounded submission/cancellation, pyannote
+explicit enrollment/reload/deletion, replay rejection, reconnects separated by
+unlabeled turns, source silence hidden by queued inference, bounded
+submission/cancellation, pyannote
 score parsing and actual local WebSocket framing/pacing/finalization.
 
-The full Ragent build requires access to its private Git dependencies. The
-implementation environment encountered HTTP 401 fetching `common`; isolated
-core tests are not a full Bevy/Empathic build or hardware validation. Real model
-accuracy, service credentials, noisy-room recordings, BLE hardware and the full
-Empathic development build remain deployment validation gates.
+The full application uses the Empathic development workspace and its pinned
+Git dependencies. Unit tests do not establish real model accuracy, live service
+behavior, noisy-room performance, database persistence, or BLE hardware behavior.
+Validate those separately before enabling identity-dependent behavior.
 
 ## Provider references
 

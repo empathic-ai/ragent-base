@@ -9,6 +9,9 @@ pub mod service {
     tonic::include_proto!("ragent");
 }
 
+#[cfg(all(feature = "speaker-identification", not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android"))))]
+pub mod speaker_identity;
+
 use std::any::Any;
 
 #[cfg(feature = "tonic")]
@@ -63,6 +66,8 @@ pub mod tools;
 use ragent_core::prelude::*;
 
 pub mod prelude {
+    #[cfg(all(feature = "speaker-identification", not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android"))))]
+    pub use crate::speaker_identity::*;
     pub use ragent_core::prelude::*;
     pub use ragent_derive::*;
 

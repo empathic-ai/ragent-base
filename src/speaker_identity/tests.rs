@@ -1,6 +1,6 @@
+use super::*;
 use anyhow::Result;
 use async_trait::async_trait;
-use ragent_speaker::*;
 use std::{
     sync::Arc,
     time::{Duration, Instant},
@@ -394,4 +394,27 @@ async fn rejected_pipeline_turn_cannot_clear_replay_protection() {
             }
         );
     }
+}
+
+#[tokio::test]
+async fn queued_turns_cannot_hide_a_long_source_silence() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut session = IdentitySession::new(
+        Arc::new(EmbeddingRecognizer {
+            embedder: Arc::new(Embed),
+        }),
+        Arc::new(FileProfileStore::new(dir.path(), "source-gap")),
+        FusionConfig::default(),
+    )
+    .await
+    .unwrap();
+    session.enroll_sample("alice", &audio(8)).await.unwrap();
+    session.resolve(turn("first", 0, 2)).await.unwrap();
+    // Process immediately, but the recording contains a minute of silence.
+    let event = session
+        .resolve(turn("after-silence", 62 * 16000, 2))
+        .await
+        .unwrap();
+    assert_eq!(event.resolution.confidence, IdentityConfidence::Medium);
+    assert!(event.resolution.user_id.is_none());
 }
