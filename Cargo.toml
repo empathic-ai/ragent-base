@@ -114,3 +114,7 @@ ignored = ["prost"]
 [target.'cfg(all(not(target_arch = "xtensa"), not(target_arch = "wasm32"), not(target_os = "android")))'.dev-dependencies]
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "net", "test-util"] }
+
+[[example]]
+name = "speaker_evaluate"
+required-features = ["polyvoice"]

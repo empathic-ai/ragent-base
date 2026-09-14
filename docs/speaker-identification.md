@@ -148,6 +148,55 @@ Git dependencies. Unit tests do not establish real model accuracy, live service
 behavior, noisy-room performance, database persistence, or BLE hardware behavior.
 Validate those separately before enabling identity-dependent behavior.
 
+## Offline model evaluation
+
+The existing package includes a small native evaluation example. Supply a model
+and a JSON manifest with `enrollment` and `evaluation` arrays. Each entry has a
+`speaker` ground-truth ID and `pcm` path relative to the manifest:
+
+```json
+{
+  "enrollment": [{"speaker": "alice", "pcm": "alice-enroll.pcm"}],
+  "evaluation": [
+    {"speaker": "alice", "pcm": "alice-held-out.pcm"},
+    {"speaker": "unknown-person", "pcm": "unknown.pcm"}
+  ]
+}
+```
+
+Use separate recordings for enrollment and evaluation. Enrollment clips must
+contain 8–30 seconds; evaluation clips must contain 1–30 seconds. Inputs are
+headerless mono PCM16 little-endian at 16 kHz. Convert a recording with:
+
+```sh
+ffmpeg -i recording.flac -t 8 -ac 1 -ar 16000 -f s16le recording.pcm
+cargo run --release --no-default-features --features polyvoice \
+  --example speaker_evaluate -- model.onnx dataset.json > results.jsonl
+```
+
+Release optimization matters for native CPU inference. The example runs the
+production embedder, enrollment and recognizer, and reports every gallery score
+and the default fusion resolution. Each evaluation clip starts with fresh fusion
+state: one clip cannot satisfy the default two-turn commitment requirement.
+This measures acoustic ranking and single-turn candidate/abstention behavior,
+not temporal attribution, ASR, diarization, or persistence. No thresholds are
+tuned automatically. The caller must exclude overlapping/duplicated source audio
+from the enrollment and evaluation sets, even if stored under different names.
+
+[Mini LibriSpeech](https://www.openslr.org/31/) provides labeled recordings and
+transcripts under CC BY 4.0 for repeatable smoke tests. Cite LibriSpeech by
+Panayotov, Chen, Povey and Khudanpur (ICASSP 2015). It is clean read speech;
+results do not establish conversational or deployment-microphone accuracy.
+Keep downloaded recordings, model weights and generated profiles outside Git.
+
+A six-speaker dev-clean-2 smoke test (four enrolled, two held out from the
+gallery; two eight-second evaluation clips per speaker) ranked the correct
+speaker first on all eight enrolled clips and left all four unenrolled clips
+unknown. Correct-speaker cosine scores were 0.814–0.903; the highest unenrolled
+score was 0.443. The independent enrolled trials yielded medium candidates,
+not committed identities. This small result supports basic model wiring and
+abstention; it is not threshold calibration or a general accuracy estimate.
+
 ## Provider references
 
 - [Live-1 streaming contract](https://docs.pyannote.ai/tutorials/streaming-real-time)
