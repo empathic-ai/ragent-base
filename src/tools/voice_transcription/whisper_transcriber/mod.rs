@@ -170,7 +170,7 @@ impl Decoder {
         let model = &mut self.model;
         let audio_features = model.encoder_forward(mel, true)?;
         if self.verbose {
-            println!("audio features: {:?}", audio_features.dims());
+            tracing::debug!("audio features: {:?}", audio_features.dims());
         }
         let sample_len = model.config().max_target_positions / 2;
         let mut sum_logprob = 0f64;
@@ -268,7 +268,7 @@ impl Decoder {
                     }
                 }
                 Err(err) => {
-                    println!("Error running at {t}: {err}")
+                    tracing::warn!("Error running at {t}: {err}")
                 }
             }
         }
@@ -288,7 +288,7 @@ impl Decoder {
             let dr = self.decode_with_fallback(&mel_segment)?;
             seek += segment_size;
             if dr.no_speech_prob > m::NO_SPEECH_THRESHOLD && dr.avg_logprob < m::LOGPROB_THRESHOLD {
-                println!("no speech detected, skipping {seek} {dr:?}");
+                tracing::debug!("no speech detected, skipping {seek} {dr:?}");
                 continue;
             }
             let segment = Segment {
@@ -297,7 +297,7 @@ impl Decoder {
                 dr,
             };
             if self.timestamps {
-                println!(
+                tracing::debug!(
                     "{:.1}s -- {:.1}s",
                     segment.start,
                     segment.start + segment.duration,
@@ -316,7 +316,7 @@ impl Decoder {
                                 .tokenizer
                                 .decode(&tokens_to_decode, true)
                                 .map_err(E::msg)?;
-                            println!("  {:.1}s-{:.1}s: {}", prev_timestamp_s, timestamp_s, text);
+                            tracing::debug!("  {:.1}s-{:.1}s: {}", prev_timestamp_s, timestamp_s, text);
                             tokens_to_decode.clear()
                         }
                         prev_timestamp_s = timestamp_s;
@@ -330,12 +330,12 @@ impl Decoder {
                         .decode(&tokens_to_decode, true)
                         .map_err(E::msg)?;
                     if !text.is_empty() {
-                        println!("  {:.1}s-...: {}", prev_timestamp_s, text);
+                        tracing::debug!("  {:.1}s-...: {}", prev_timestamp_s, text);
                     }
                     tokens_to_decode.clear()
                 }
             } else {
-                println!(
+                tracing::debug!(
                     "{:.1}s -- {:.1}s: {}",
                     segment.start,
                     segment.start + segment.duration,
@@ -343,7 +343,7 @@ impl Decoder {
                 )
             }
             if self.verbose {
-                println!("{seek}: {segment:?}, in {:?}", start.elapsed());
+                tracing::debug!("{seek}: {segment:?}, in {:?}", start.elapsed());
             }
             segments.push(segment)
         }
@@ -533,7 +533,7 @@ fn main() -> Result<()> {
                 std::path::PathBuf::from(input)
             }
         } else {
-            println!(
+            tracing::debug!(
                 "No audio file submitted: Downloading https://huggingface.co/datasets/Narsil/candle_demo/blob/main/samples_jfk.wav"
             );
             dataset.get("samples_jfk.wav")?
@@ -572,7 +572,7 @@ fn main() -> Result<()> {
     if sample_rate != m::SAMPLE_RATE as u32 {
         anyhow::bail!("input file must have a {} sampling rate", m::SAMPLE_RATE)
     }
-    println!("pcm data loaded {}", pcm_data.len());
+    tracing::debug!("pcm data loaded {}", pcm_data.len());
     let mel = audio::pcm_to_mel(&config, &pcm_data, &mel_filters);
     let mel_len = mel.len();
     let mel = Tensor::from_vec(
@@ -580,7 +580,7 @@ fn main() -> Result<()> {
         (1, config.num_mel_bins, mel_len / config.num_mel_bins),
         &device,
     )?;
-    println!("loaded mel: {:?}", mel.dims());
+    tracing::debug!("loaded mel: {:?}", mel.dims());
 
     let mut model = if args.quantized {
         let vb = candle_transformers::quantized_var_builder::VarBuilder::from_gguf(

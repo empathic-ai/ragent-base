@@ -26,7 +26,7 @@ where
         let available_frames = self.buffer.len() / self.channels;
         let frames_to_copy = std::cmp::min(output_frames, available_frames);
 
-        println!("Available frames: {} Output frames: {}", available_frames, output_frames);
+        tracing::trace!("Available frames: {} Output frames: {}", available_frames, output_frames);
 
         for i in 0..frames_to_copy {
             for ch in 0..self.channels {

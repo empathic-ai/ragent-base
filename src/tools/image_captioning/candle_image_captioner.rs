@@ -110,7 +110,7 @@ pub fn main() -> anyhow::Result<()> {
     let (image_embeds, device, mut model) = if args.quantized {
         let device = Device::Cpu;
         let image = load_image(args.image)?.to_device(&device)?;
-        println!("loaded image {image:?}");
+        tracing::debug!("loaded image {image:?}");
 
         let vb = quantized_blip::VarBuilder::from_gguf(model_file, &device)?;
         let model = quantized_blip::BlipForConditionalGeneration::new(&config, vb)?;
@@ -118,7 +118,7 @@ pub fn main() -> anyhow::Result<()> {
         (image_embeds, device, Model::Q(model))
     } else {
         let image = load_image(args.image)?.to_device(&device)?;
-        println!("loaded image {image:?}");
+        tracing::debug!("loaded image {image:?}");
 
         let vb =
             unsafe { VarBuilder::from_mmaped_safetensors(&[model_file], DType::F32, &device)? };

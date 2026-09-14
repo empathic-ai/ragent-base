@@ -28,7 +28,8 @@ openai = ["openai-api-rs"]
 deepgram = ["dep:deepgram"]
 
 [dependencies]
-log = { version = "0.4.20", features = ["max_level_debug", "release_max_level_warn"] }
+log = "0.4.20"
+tracing = { version = "0.1", default-features = false, features = ["std"] }
 bevy_reflect = { git = "https://github.com/empathic-ai/bevy.git", branch = "reflect/serializable-dynamic-types", default-features = false, features = ["uuid"], optional = true }
 bevy = { git = "https://github.com/empathic-ai/bevy.git", branch = "reflect/serializable-dynamic-types", default-features = false, optional = true }
 # TODO: Replace with crates.io reference once Tonic officially supports Axum v0.8

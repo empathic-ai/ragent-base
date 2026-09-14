@@ -262,7 +262,7 @@ impl ChatCompletionResponseWorker {
         let mut text_tasks = "".to_string();
         let mut full_response = "".to_string();
 
-        info!("Starting to receive chat response stream...");
+        tracing::debug!("Receiving chat response stream");
 
         while let Some(result) = stream.next().await {
             match result {
@@ -307,13 +307,13 @@ impl ChatCompletionResponseWorker {
                     //})
                 }
                 Err(err) => {
-                    info!("Error getting chat response: {}", err);
+                    tracing::error!(%err, "Chat response failed");
                     return Err(anyhow!(err));
                 }
             }
         }
 
-        info!("Finished receiving chat response stream. Outputting tasks ({}).", text_tasks);
+        tracing::debug!(remaining_bytes = text_tasks.len(), "Chat response stream completed");
 
         _ = self.output_tasks(text_tasks, true).await;
 
@@ -919,7 +919,7 @@ impl AgentWorker {
                             //state.broadcast_ev(_space_id.clone(), UserEvent::new("".to_string(), Dynamic::new(PlayVoiceEvent { data: bytes.to_vec() }), token.clone()), BroadcastMode::HostOnly);
                             //AudioManager::start_playing(bytes.to_vec()).await;
                         } else {
-                            println!("[{}] Cancelled voice synthesis.", _name.clone());
+                            tracing::debug!("Voice synthesis cancelled");
                         }
                     }
                 }
@@ -935,7 +935,7 @@ impl AgentWorker {
 
                 },
                 _ = cancel_rx.recv() => {
-                    println!("Cancelled agent!")
+                    tracing::debug!("Agent cancelled")
                 }
             }
         });
@@ -974,9 +974,9 @@ impl AgentWorker {
                 let converter = super::ElevenLabsConverter::new_from_env();
 
                 let wav_data = delune::samples_to_wav(1, 16000, 16, buffer.to_vec());
-                println!("Converting...");
+                tracing::trace!("Converting audio");
                 let result = converter.convert_voice(voice_id.clone(), wav_data).await?;
-                println!("Converted.");
+                tracing::trace!("Audio converted");
 
                 output_tx.send(UserEvent::new(Some(user_id.clone()), primary_space_id.clone(), UserEventType::SpeakBytesEvent(SpeakBytesEvent { data: result.bytes }))).unwrap();
                 buffer.clear();

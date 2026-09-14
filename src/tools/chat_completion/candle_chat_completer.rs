@@ -103,14 +103,14 @@ impl Model {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn new(args: Args) -> Result<Self> {
   
-        println!(
+        tracing::debug!(
             "avx: {}, neon: {}, simd128: {}, f16c: {}",
             candle_core::utils::with_avx(),
             candle_core::utils::with_neon(),
             candle_core::utils::with_simd128(),
             candle_core::utils::with_f16c()
         );
-        println!(
+        tracing::debug!(
             "temp: {:.2} repeat-penalty: {:.2} repeat-last-n: {}",
             args.temperature.unwrap_or(0.),
             args.repeat_penalty,
@@ -201,7 +201,7 @@ impl Model {
                 }
             }
         };
-        println!("retrieved the files in {:?}", start.elapsed());
+        tracing::debug!("retrieved the files in {:?}", start.elapsed());
         let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(anyhow::Error::msg)?;
     
         let start = std::time::Instant::now();
@@ -266,7 +266,7 @@ impl Model {
                 }
             }
         };
-        println!("loaded the model in {:?}", start.elapsed());
+        tracing::debug!("loaded the model in {:?}", start.elapsed());
 
         let logits_processor = LogitsProcessor::new(args.seed, args.temperature, args.top_p);
         Ok(Self {
@@ -335,7 +335,7 @@ impl Model {
             //use std::io::Write;
 
             use candle_core::IndexOp;
-            println!("starting the inference loop");
+            tracing::debug!("starting the inference loop");
             let tokens = self
                 .tokenizer
                 .tokenizer()
@@ -347,7 +347,7 @@ impl Model {
             if self.verbose_prompt {
                 for (token, id) in tokens.get_tokens().iter().zip(tokens.get_ids().iter()) {
                     let token = token.replace('▁', " ").replace("<0x0A>", "\n");
-                    println!("{id:7} -> '{token}'");
+                    tracing::debug!("{id:7} -> '{token}'");
                 }
             }
             let mut tokens = tokens.get_ids().to_vec();
@@ -356,7 +356,7 @@ impl Model {
                 Some(token) => token,
                 None => Err(anyhow!("cannot find the endoftext token"))?,
             };
-            println!("{prompt}");
+            tracing::debug!("{prompt}");
             //std::io::stdout().flush()?;
             let start_gen = std::time::Instant::now();
             let mut pos = 0;
@@ -395,7 +395,7 @@ impl Model {
                 pos += context_size;
             }
             let dt = start_gen.elapsed();
-            println!(
+            tracing::debug!(
                 "\n{generated_tokens} tokens generated ({:.2} token/s)",
                 generated_tokens as f64 / dt.as_secs_f64(),
             );
@@ -525,14 +525,14 @@ impl ChatCompleter for CandleChatCompleter {
         let stream = stream.map(|x| {
             match x {
                 Ok(x) => {
-                    println!("GOT RESPONSE: '{}'", x);
+                    tracing::debug!("GOT RESPONSE: '{}'", x);
                     Ok(super::ChatCompletionResponse {
                         completion: x,
                         ..Default::default()
                     })
                 },
                 Err(e) => {
-                    println!("ERROR GETTING CHAT RESPONSE: {}", e);
+                    tracing::warn!("ERROR GETTING CHAT RESPONSE: {}", e);
                     Err(e)
                 },
             }

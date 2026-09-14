@@ -29,3 +29,9 @@ feature solely because its source is retained.
 
 `docs/legacy/build.rs.txt` also retains the original protocol build script,
 including its explicit output-directory setup and generator branching.
+
+
+## Logging
+
+See the workspace [logging guide](../../docs/logging.md) for selectable groups,
+local configuration, VS Code controls, and platform-specific behavior.

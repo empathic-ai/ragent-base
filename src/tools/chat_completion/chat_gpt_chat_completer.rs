@@ -1,7 +1,7 @@
 use async_channel::{Sender, Receiver};
 use bytes::Bytes;
 use futures_util::lock::Mutex;
-use log::info;
+use tracing::info;
 use openai_api_rs::v1::api::{OpenAIClient, OpenAIClientBuilder};
 use openai_api_rs::v1::chat_completion::chat_completion::ChatCompletionRequest;
 use openai_api_rs::v1::chat_completion::chat_completion_stream::{ChatCompletionStreamRequest, ChatCompletionStreamResponse};

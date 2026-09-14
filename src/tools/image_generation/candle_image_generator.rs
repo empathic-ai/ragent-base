@@ -317,7 +317,7 @@ fn text_embeddings(
         Some(padding) => *tokenizer.get_vocab(true).get(padding.as_str()).unwrap(),
         None => *tokenizer.get_vocab(true).get("<|endoftext|>").unwrap(),
     };
-    println!("Running with prompt \"{prompt}\".");
+    tracing::debug!("Running with prompt \"{prompt}\".");
     let mut tokens = tokenizer
         .encode(prompt, true)
         .map_err(E::msg)?
@@ -335,7 +335,7 @@ fn text_embeddings(
     }
     let tokens = Tensor::new(tokens.as_slice(), device)?.unsqueeze(0)?;
 
-    println!("Building the Clip transformer.");
+    tracing::debug!("Building the Clip transformer.");
     let clip_weights_file = if first {
         ModelFile::Clip
     } else {
@@ -508,9 +508,9 @@ fn run(args: Args) -> Result<()> {
 
     let text_embeddings = Tensor::cat(&text_embeddings, D::Minus1)?;
     let text_embeddings = text_embeddings.repeat((bsize, 1, 1))?;
-    println!("{text_embeddings:?}");
+    tracing::debug!("{text_embeddings:?}");
 
-    println!("Building the autoencoder.");
+    tracing::debug!("Building the autoencoder.");
     let vae_weights = ModelFile::Vae.get(vae_weights, sd_version, use_f16)?;
     let vae = sd_config.build_vae(vae_weights, &device, dtype)?;
     let init_latent_dist = match &img2img {
@@ -520,7 +520,7 @@ fn run(args: Args) -> Result<()> {
             Some(vae.encode(&image)?)
         }
     };
-    println!("Building the unet.");
+    tracing::debug!("Building the unet.");
     let unet_weights = ModelFile::Unet.get(unet_weights, sd_version, use_f16)?;
     let unet = sd_config.build_unet(unet_weights, &device, 4, use_flash_attn, dtype)?;
 
@@ -562,7 +562,7 @@ fn run(args: Args) -> Result<()> {
         };
         let mut latents = latents.to_dtype(dtype)?;
 
-        println!("starting sampling");
+        tracing::debug!("starting sampling");
         for (timestep_index, &timestep) in timesteps.iter().enumerate() {
             if timestep_index < t_start {
                 continue;
@@ -589,7 +589,7 @@ fn run(args: Args) -> Result<()> {
 
             latents = scheduler.step(&noise_pred, timestep, &latents)?;
             let dt = start_time.elapsed().as_secs_f32();
-            println!("step {}/{n_steps} done, {:.2}s", timestep_index + 1, dt);
+            tracing::debug!("step {}/{n_steps} done, {:.2}s", timestep_index + 1, dt);
 
             if args.intermediary_images {
                 save_image(
@@ -605,7 +605,7 @@ fn run(args: Args) -> Result<()> {
             }
         }
 
-        println!(
+        tracing::debug!(
             "Generating the final image for sample {}/{}.",
             idx + 1,
             num_samples
