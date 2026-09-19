@@ -20,11 +20,11 @@ use time::{Instant, SystemTime};
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow, ensure};
 use async_compat::{Compat, CompatExt};
 #[cfg(feature = "bevy")]
 use bevy::prelude::*;
-use bevy::reflect::FromReflect;
+use bevy::reflect::{DynamicStruct, FromReflect};
 #[cfg(feature = "bevy")]
 use bevy::tasks::{AsyncComputeTaskPool, Task, block_on, futures_lite::future};
 use common::prelude::*;
@@ -41,6 +41,28 @@ use substring::Substring;
 pub struct AgentWorker {
     pub user_id: Id,
     pub state: Arc<Mutex<AgentState>>,
+}
+
+/// A task call emitted by an isolated agent completion.
+#[derive(Debug)]
+pub struct AgentTaskCall {
+    pub name: String,
+    pub arguments: Vec<String>,
+    /// The same dynamic task representation used by the live event pipeline.
+    pub task: DynamicStruct,
+}
+
+struct ParsedAgentTaskCall {
+    name: String,
+    arguments: Vec<String>,
+}
+
+/// Result returned by an isolated task executor.
+pub enum AgentTaskResult {
+    /// Send this text back to the model as the result of the task call.
+    Continue(String),
+    /// Finish the isolated completion with this text.
+    Complete(String),
 }
 
 pub struct TranscriberWorker {
@@ -723,6 +745,113 @@ pub struct AgentState {
 }
 
 impl AgentWorker {
+    /// Run an agent without starting the live Bevy/voice worker pipeline.
+    ///
+    /// This is useful for short-lived host tools such as repository analysis:
+    /// the supplied `AgentConfig` still controls the task prompt sent to the
+    /// chat completer, while the caller owns execution of each emitted task.
+    /// The live `AgentWorker::new` path is deliberately unchanged.
+    pub async fn run_isolated<F, Fut>(
+        config: AgentConfig,
+        initial_prompt: String,
+        mut chat_completer: Box<dyn ChatCompleter>,
+        mut execute_task: F,
+    ) -> Result<String>
+    where
+        F: FnMut(AgentTaskCall) -> Fut,
+        Fut: std::future::Future<Output = Result<AgentTaskResult>>,
+    {
+        const MAX_ROUNDS: usize = 8;
+
+        let task_configs: Vec<TaskConfig> = config
+            .task_configs_by_name
+            .values()
+            .cloned()
+            .collect();
+        let mut messages = vec![
+            ChatCompletionMessage {
+                role: MessageRole::system,
+                content: Content::Text(config.description.clone()),
+                name: None,
+                function_call: None,
+            },
+            ChatCompletionMessage {
+                role: MessageRole::user,
+                content: Content::Text(initial_prompt),
+                name: None,
+                function_call: None,
+            },
+        ];
+
+        for _ in 0..MAX_ROUNDS {
+            let mut stream = chat_completer
+                .get_response(messages.clone(), task_configs.clone())
+                .await?;
+            let mut response = String::new();
+
+            while let Some(result) = stream.next().await {
+                response.push_str(&result?.completion);
+            }
+
+            let calls = Self::parse_isolated_task_calls(&response)?;
+            ensure!(!calls.is_empty(), "The isolated agent returned no task calls: {response}");
+            messages.push(ChatCompletionMessage {
+                role: MessageRole::assistant,
+                content: Content::Text(response),
+                name: None,
+                function_call: None,
+            });
+
+            for call in calls {
+                let call_name = call.name.clone();
+                let task_config = config
+                    .task_configs_by_name
+                    .get(&call.name)
+                    .with_context(|| format!("Unknown isolated agent task: {}", call.name))?;
+                let task = (task_config.create_task)(call.arguments.clone())?;
+                match execute_task(AgentTaskCall {
+                    name: call.name,
+                    arguments: call.arguments,
+                    task,
+                })
+                .await?
+                {
+                    AgentTaskResult::Complete(message) => return Ok(message),
+                    AgentTaskResult::Continue(result) => messages.push(ChatCompletionMessage {
+                        role: MessageRole::user,
+                        content: Content::Text(format!("{call_name} result:\n{result}")),
+                        name: None,
+                        function_call: None,
+                    }),
+                }
+            }
+        }
+
+        Err(anyhow!("The isolated agent exceeded its task-call limit"))
+    }
+
+    fn parse_isolated_task_calls(response: &str) -> Result<Vec<ParsedAgentTaskCall>> {
+        let (commands, _) = get_commands(response);
+        commands
+            .into_iter()
+            .map(|command| {
+                let open = command
+                    .find('(')
+                    .context("Malformed isolated agent task call")?;
+                ensure!(command.ends_with(')'), "Malformed isolated agent task call");
+                let name = command[..open].trim().to_owned();
+                ensure!(!name.is_empty(), "Isolated agent task call has no name");
+                let arguments = ChatCompletionResponseWorker::parse_arguments(
+                    &command[open + 1..command.len() - 1],
+                );
+                Ok(ParsedAgentTaskCall {
+                    name,
+                    arguments,
+                })
+            })
+            .collect()
+    }
+
     pub async fn start_conversation(&self, space_id: Id) -> Result<()> {
         let mut state = self.state.lock().await;
         state.primary_space_id = space_id.clone();
