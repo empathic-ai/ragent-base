@@ -26,7 +26,7 @@ use rust_decimal::prelude::*;
 #[derive(Default)]
 pub struct SynthesisResult {
     pub bytes: Vec<u8>,
-    pub estimated_cost: Decimal
+    pub cost: Decimal
 }
 
 #[async_trait]

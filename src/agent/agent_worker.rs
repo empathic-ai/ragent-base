@@ -780,11 +780,12 @@ impl AgentWorker {
 
         //let _space_id = space_id.clone();
 
-        #[cfg(not(feature = "server"))]
-        let chat_completer = CandleChatCompleter::new();
+        #[cfg(all(not(feature = "server"), feature = "candle"))]
+        let chat_completer: Option<Box<dyn ChatCompleter>> = Some(Box::new(CandleChatCompleter::new()));
+        #[cfg(all(not(feature = "server"), not(feature = "candle")))]
+        let chat_completer: Option<Box<dyn ChatCompleter>> = None;
         #[cfg(feature = "server")]
-        //let chat_completer = CandleChatCompleter::new();
-        let chat_completer = ChatGPTChatCompleter::new_from_env();
+        let chat_completer: Option<Box<dyn ChatCompleter>> = Some(Box::new(ChatGPTChatCompleter::new_from_env()));
 
         let (cancel_tx, mut cancel_rx) = tokio::sync::broadcast::channel::<()>(1);
 
@@ -794,7 +795,7 @@ impl AgentWorker {
             user_transcribers: Default::default(),
             synthesizer: None,
             space_transcribers: Default::default(),
-            chat_completer: Some(Box::new(chat_completer)),
+            chat_completer,
             messages: Default::default(),
             functions: functions,
             output_tx: output_tx.clone(),
@@ -1260,6 +1261,10 @@ impl AgentState {
     }
 
     pub async fn get_chat_completion_response(&mut self, space_id: Id) -> Result<()> {
+        let chat_completer = self.chat_completer.as_deref()
+            .ok_or_else(|| anyhow!("No local chat completion provider is enabled"))?;
+        let chat_completer = dyn_clone::clone_box(chat_completer);
+
         self.running_contexts.retain(|k, mut v| {
             v.send(());
             false
@@ -1271,7 +1276,6 @@ impl AgentState {
         self.running_contexts.insert(context_id.clone(), cancel_tx);
 
         //let x = .unwrap();
-        let chat_completer = dyn_clone::clone_box(&*self.chat_completer.as_deref().unwrap());
         let mut response_worker = ChatCompletionResponseWorker::new(
             space_id.clone(),
             self.user_id.clone(),

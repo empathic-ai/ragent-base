@@ -44,7 +44,6 @@ use types::*;
 //use prelude::{get_event_name_from_type, get_event_name_from_type_name, SpeakEvent};
 pub use ragent_core;
 pub use ragent_derive;
-use serde::{Deserialize, Serialize};
 
 use anyhow::{Result, anyhow};
 
