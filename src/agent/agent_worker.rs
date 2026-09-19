@@ -29,7 +29,7 @@ use bevy::reflect::FromReflect;
 use bevy::tasks::{AsyncComputeTaskPool, Task, block_on, futures_lite::future};
 use common::prelude::*;
 use delune::*;
-use fancy_regex::Regex;
+use super::text_patterns::{COMMAND_NAME, SENTENCE};
 use std::fs::File;
 use std::io::{BufReader, Read};
 use substring::Substring;
@@ -336,13 +336,13 @@ impl ChatCompletionResponseWorker {
         let (text_tasks, mut dangling_text_task) = get_commands(&temp_commands);
 
         for text_task in text_tasks {
-            let r = Regex::new(r#"(.*?)(?=\()"#).unwrap();
+            let r = &*COMMAND_NAME;
             //println!("{}", command.clone());
             let _command = text_task.clone();
-            let command_name = r.captures(&_command).unwrap();
+            let command_name = r.captures(&_command);
 
             if let Some(command_name) = command_name {
-                let task_name = command_name[0].to_string();
+                let task_name = command_name[1].to_string();
 
                 let args = text_task
                     .substring(task_name.chars().count() + 1, text_task.chars().count() - 1)
@@ -371,10 +371,10 @@ impl ChatCompletionResponseWorker {
 
         //println!("Dangling text tasks: {}", dangling_text_task);
 
-        let r = Regex::new(r#"(.*?)(?=\()"#).unwrap();
+        let r = &*COMMAND_NAME;
         let mut t = dangling_text_task.clone();
         let mut _t = dangling_text_task.clone();
-        let mut dangling_task_name = r.captures(&_t).unwrap();
+        let mut dangling_task_name = r.captures(&_t);
 
         // If there is a space later on in the string, process it as a speech command
         if dangling_task_name.is_none()
@@ -390,11 +390,11 @@ impl ChatCompletionResponseWorker {
                     .trim_start()
                     .trim_start_matches("\"");
             t = dangling_text_task.clone();
-            dangling_task_name = r.captures(&t).unwrap();
+            dangling_task_name = r.captures(&t);
         }
 
         if let Some(dangling_task_name) = dangling_task_name {
-            let dangling_task_name = dangling_task_name[0].to_string();
+            let dangling_task_name = dangling_task_name[1].to_string();
 
             //println!("Dangling task name found: {}", dangling_task_name);
 
@@ -471,15 +471,14 @@ impl ChatCompletionResponseWorker {
         //println!("Processing speech: {}", args.join(", "));
 
         let length = args.len();
-        //let re: Regex = Regex::new(r#".*?(?:\n|\r|\.|\?|!|,)"#).unwrap();
-        let re: Regex = Regex::new(r#".*?(?:\n|\r|\.|\?|!)"#).unwrap();
+        let re = &*SENTENCE;
 
         let speech_text = args[length - 1].clone();
         let captures = re.find_iter(&speech_text);
 
         let mut processed_speech: String = "".to_string();
         for sentence in captures {
-            let speech_text = sentence.unwrap().as_str().to_string();
+            let speech_text = sentence.as_str().to_string();
 
             if !speech_text
                 .trim_matches('.')
