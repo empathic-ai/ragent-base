@@ -29,6 +29,7 @@ use std::error::Error;
 use crate::tools::TranscriptionResponse;
 
 use super::{Transcriber, result};
+use rust_decimal::prelude::*;
 use anyhow::{anyhow, Context, Result};
 use tokio::sync::broadcast::{self, Receiver, Sender};
 
@@ -38,6 +39,14 @@ use common::prelude::*;
 pub struct DeepgramTranscriber {
     languages: Vec<String>,
     diarize: bool,
+}
+
+fn deepgram_cost(duration_seconds: f32) -> Decimal {
+    let cost_per_minute = env::var("DEEPGRAM_COST_PER_MINUTE")
+        .ok()
+        .and_then(|value| value.parse::<f32>().ok())
+        .unwrap_or(0.0077);
+    Decimal::from_f32(duration_seconds.max(0.0) / 60.0 * cost_per_minute).unwrap_or_default()
 }
 
 enum DeepgramEvent {
@@ -318,6 +327,9 @@ impl Transcriber for DeepgramTranscriber {
                                                                 session_id: Some(session_id.clone()),
                                                                 stream_start_sample: clock_valid.load(std::sync::atomic::Ordering::SeqCst).then_some(stream_start),
                                                                 transcript: alternative.transcript.clone(),
+                                                                estimated_cost: deepgram_cost(duration as f32),
+                                                                usage_quantity: duration as f32,
+                                                                usage_unit: "seconds".to_string(),
                                                                 start_seconds: Some(start),
                                                                 end_seconds: Some(start + duration),
                                                                 is_final,
@@ -333,6 +345,10 @@ impl Transcriber for DeepgramTranscriber {
                                                                     speaker: group.speaker,
                                                                     diarization_label: group.speaker.map(|speaker| speaker.to_string()),
                                                                     transcript: group.text,
+                                                                    // Bill once on the last group so quota crossing preserves this result's text.
+                                                                    estimated_cost: if index + 1 == group_count { deepgram_cost(duration as f32) } else { Decimal::ZERO },
+                                                                    usage_quantity: if index + 1 == group_count { duration as f32 } else { 0.0 },
+                                                                    usage_unit: "seconds".to_string(),
                                                                     start_seconds: Some(group.start),
                                                                     end_seconds: Some(group.end),
                                                                     is_final,

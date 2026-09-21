@@ -64,6 +64,41 @@ pub struct Parameter {
 }
 
 impl TaskConfig {
+    /// Create a task description for an isolated agent that handles the task
+    /// outside of the Bevy event pipeline.
+    ///
+    /// `AgentWorker::run_isolated` uses the same argument-to-task conversion
+    /// as the live event pipeline, while the isolated caller executes the
+    /// resulting task explicitly rather than emitting a live `UserEvent`.
+    pub fn prompt_only(
+        name: impl Into<String>,
+        description: impl Into<String>,
+        parameters: Vec<Parameter>,
+        is_available: bool,
+    ) -> TaskConfig {
+        let task_parameters = parameters.clone();
+        TaskConfig {
+            name: name.into(),
+            description: description.into(),
+            parameters,
+            create_task: Arc::new(move |args: Vec<String>| {
+                if args.len() != task_parameters.len() {
+                    return Err(anyhow!(
+                        "Expected {} task arguments, received {}",
+                        task_parameters.len(),
+                        args.len()
+                    ));
+                }
+                let mut task = DynamicStruct::default();
+                for (parameter, argument) in task_parameters.iter().zip(args) {
+                    task.insert(parameter.name.clone(), argument);
+                }
+                Ok(task)
+            }),
+            is_available,
+        }
+    }
+
     pub fn new<T>(is_available: bool) -> TaskConfig where T: Task + Typed {
         let docs = T::DOCS;
         let mut parameters = Vec::<Parameter>::new();

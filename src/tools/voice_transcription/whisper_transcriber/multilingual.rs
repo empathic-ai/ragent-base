@@ -1,4 +1,4 @@
-use candle_core::{IndexOp, Result, Tensor, D};
+use candle_core::{D, IndexOp, Result, Tensor};
 use tokenizers::Tokenizer;
 
 const LANGUAGES: [(&str, &str); 99] = [
@@ -132,8 +132,8 @@ pub fn detect_language(
     let mut probs = LANGUAGES.iter().zip(probs.iter()).collect::<Vec<_>>();
     probs.sort_by(|(_, p1), (_, p2)| p2.total_cmp(p1));
     for ((_, language), p) in probs.iter().take(5) {
-        println!("{language}: {p}")
+        tracing::debug!("{language}: {p}")
     }
-    let language = super::token_id(tokenizer, &format!("<|{}|>", probs[0].0 .0))?;
+    let language = super::token_id(tokenizer, &format!("<|{}|>", probs[0].0.0))?;
     Ok(language)
 }

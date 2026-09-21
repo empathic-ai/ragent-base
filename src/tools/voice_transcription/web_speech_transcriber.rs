@@ -9,34 +9,35 @@ use std::thread;
 
 use bytes::{BufMut, Bytes, BytesMut};
 use crossbeam::channel::RecvError;
+use futures::SinkExt;
 use futures::channel::mpsc;
 use futures::stream::StreamExt;
-use futures::SinkExt;
 
 use std::error::Error;
 
 use crate::tools::TranscriptionResponse;
 
-use super::{result, Transcriber};
+use super::{Transcriber, result};
 use anyhow::Result;
-use tokio::sync::broadcast::{self, Sender, Receiver};
+use tokio::sync::broadcast::{self, Receiver, Sender};
 
 use common::prelude::*;
-pub struct WebSpeechTranscriber {
-    
-}
+pub struct WebSpeechTranscriber {}
 
 impl WebSpeechTranscriber {
     pub fn new() -> Self {
-        WebSpeechTranscriber {
-
-        }
+        WebSpeechTranscriber {}
     }
 }
 
 #[async_trait]
 impl Transcriber for WebSpeechTranscriber {
-    async fn transcribe_stream(&mut self, sample_rate: u32, stream: Receiver<Bytes>, token: CancellationToken) -> Result<mpsc::UnboundedReceiver<Result<TranscriptionResponse>>> {
+    async fn transcribe_stream(
+        &mut self,
+        sample_rate: u32,
+        stream: Receiver<Bytes>,
+        token: CancellationToken,
+    ) -> Result<mpsc::UnboundedReceiver<Result<TranscriptionResponse>>> {
         todo!()
     }
 }

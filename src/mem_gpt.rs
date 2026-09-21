@@ -8,7 +8,7 @@ pub fn init() -> PyResult<()> {
             .call1((vec![1, 2, 3],))?
             .extract()?;
         assert_eq!(total, 6);
-        println!("RAN PYTHON!");
+        tracing::debug!("RAN PYTHON!");
         Ok(())
     })
 }

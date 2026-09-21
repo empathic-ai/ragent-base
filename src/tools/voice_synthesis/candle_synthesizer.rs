@@ -1,6 +1,6 @@
+use super::*;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use super::*;
 
 #[cfg(feature = "mkl")]
 extern crate intel_mkl_src;
@@ -16,11 +16,11 @@ use candle_transformers::models::encodec;
 use candle_transformers::models::metavoice::{adapters, gpt, tokenizers, transformer};
 use candle_transformers::models::quantized_metavoice::transformer as qtransformer;
 
+use crate::prelude::candle_helpers;
 use candle_core::{DType, IndexOp, Tensor};
 use candle_nn::VarBuilder;
 use hf_hub::api::sync::Api;
-use rand::{distributions::Distribution, SeedableRng};
-use crate::prelude::candle_helpers;
+use rand::{SeedableRng, distributions::Distribution};
 
 pub const ENCODEC_NTOKENS: u32 = 1024;
 
@@ -124,7 +124,7 @@ fn main() -> Result<()> {
     } else {
         None
     };
-    println!(
+    tracing::debug!(
         "avx: {}, neon: {}, simd128: {}, f16c: {}",
         candle_core::utils::with_avx(),
         candle_core::utils::with_neon(),
@@ -201,10 +201,10 @@ fn main() -> Result<()> {
     let encodec_config = encodec::Config::default();
     let encodec_model = encodec::Model::new(&encodec_config, encodec_vb)?;
 
-    println!("prompt: '{}'", args.prompt);
+    tracing::debug!("prompt: '{}'", args.prompt);
     let prompt_tokens = fs_tokenizer.encode(&args.prompt)?;
     let mut tokens = prompt_tokens.clone();
-    println!("{tokens:?}");
+    tracing::debug!("{tokens:?}");
     let spk_emb_file = match &args.spk_emb {
         Some(w) => std::path::PathBuf::from(w),
         None => repo.get("spk_emb.safetensors")?,
@@ -245,7 +245,7 @@ fn main() -> Result<()> {
     println!();
     let fie2c = adapters::FlattenedInterleavedEncodec2Codebook::new(ENCODEC_NTOKENS);
     let (text_ids, ids1, ids2) = fie2c.decode(&tokens);
-    println!("text ids len: {}", text_ids.len());
+    tracing::debug!("text ids len: {}", text_ids.len());
     let mut rng = rand::rngs::StdRng::seed_from_u64(args.seed + 1337);
     // TODO: Use the config rather than hardcoding the offset here.
     let encoded_text: Vec<_> = prompt_tokens.iter().map(|v| v - 1024).collect();
@@ -263,7 +263,7 @@ fn main() -> Result<()> {
     let in_x2 = Tensor::new(hierarchies_in2, &device)?;
     let in_x = Tensor::stack(&[in_x1, in_x2], 0)?.unsqueeze(0)?;
     let logits = second_stage_model.forward(&in_x)?;
-    println!("sampling from logits...");
+    tracing::debug!("sampling from logits...");
     let mut codes = vec![];
     for logits in logits.iter() {
         let logits = logits.squeeze(0)?;
@@ -282,15 +282,15 @@ fn main() -> Result<()> {
 
     let codes = Tensor::new(codes, &device)?.unsqueeze(0)?;
     let codes = Tensor::cat(&[in_x, codes], 1)?;
-    println!("codes: {codes}");
+    tracing::debug!("codes: {codes}");
     let tilted_encodec = adapters::TiltedEncodec::new(ENCODEC_NTOKENS);
     let codes = codes.i(0)?.to_vec2::<u32>()?;
     let (text_ids, audio_ids) = tilted_encodec.decode(&codes);
-    println!("text_ids len: {:?}", text_ids.len());
+    tracing::debug!("text_ids len: {:?}", text_ids.len());
     let audio_ids = Tensor::new(audio_ids, encodec_device)?.unsqueeze(0)?;
-    println!("audio_ids shape: {:?}", audio_ids.shape());
+    tracing::debug!("audio_ids shape: {:?}", audio_ids.shape());
     let pcm = encodec_model.decode(&audio_ids)?;
-    println!("output pcm shape: {:?}", pcm.shape());
+    tracing::debug!("output pcm shape: {:?}", pcm.shape());
     let pcm = pcm.i(0)?.i(0)?.to_dtype(DType::F32)?;
     let pcm = candle_helpers::audio::normalize_loudness(&pcm, 24_000, true)?;
     let pcm = pcm.to_vec1::<f32>()?;
@@ -300,18 +300,22 @@ fn main() -> Result<()> {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct CandleSynthesizer {
-}
+pub struct CandleSynthesizer {}
 
 impl CandleSynthesizer {
     pub fn new() -> Self {
-        Self { }
+        Self {}
     }
 }
 
 #[async_trait]
 impl Synthesizer for CandleSynthesizer {
-    async fn create_speech(&self, emotion: String, voice_name: String, text: String) -> Result<SynthesisResult> {
+    async fn create_speech(
+        &self,
+        emotion: String,
+        voice_name: String,
+        text: String,
+    ) -> Result<SynthesisResult> {
         todo!();
     }
 }

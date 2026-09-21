@@ -9,7 +9,8 @@ from the prelude, rather than constructing provider requests themselves.
 `bevy`, `tokio`, and `futures` are the default integration features. Providers
 such as `openai`, `deepgram`, `anthropic`, and `candle` are selected separately;
 provider modules also respect their existing target gates. Candle includes the
-local model, tokenizer, and model-download stack.
+local model, tokenizer, model-download, image-decoding, and Chrome-profiling
+stack. Image and profiling dependencies are not compiled when Candle is disabled.
 
 `prost` enables Protobuf generation; `tonic` adds gRPC generation. The generators
 are optional **host** dependencies, so ordinary provider and ESP builds do not
@@ -29,3 +30,9 @@ feature solely because its source is retained.
 
 `docs/legacy/build.rs.txt` also retains the original protocol build script,
 including its explicit output-directory setup and generator branching.
+
+
+## Logging
+
+See the workspace [logging guide](../../docs/logging.md) for selectable groups,
+local configuration, VS Code controls, and platform-specific behavior.

@@ -57,10 +57,23 @@ impl TranscriberWorker {
     /// session IDs. Untimed transcribers still emit text, with no guessed identity.
     pub async fn new_with_speakers(
         space_id: Id,
-        mut transcriber: Box<dyn Transcriber>,
+        transcriber: Box<dyn Transcriber>,
         options: SpeakerOptions,
         output_tx: tokio::sync::broadcast::Sender<UserEvent>,
     ) -> Result<(Self, SpeakerPipeline)> {
+        Self::new_with_speakers_and_usage(
+            space_id, transcriber, options, output_tx, UsageReporter::disabled(),
+        ).await
+    }
+
+    pub async fn new_with_speakers_and_usage(
+        space_id: Id,
+        mut transcriber: Box<dyn Transcriber>,
+        options: SpeakerOptions,
+        output_tx: tokio::sync::broadcast::Sender<UserEvent>,
+        usage: UsageReporter,
+    ) -> Result<(Self, SpeakerPipeline)> {
+        let usage = Arc::new(std::sync::RwLock::new(usage));
         let identity =
             IdentitySession::new(options.recognizer, options.store, options.fusion).await?;
         let (pipeline, mut identities) = SpeakerPipeline::start(identity, options.diarizer)?;
@@ -117,6 +130,7 @@ impl TranscriberWorker {
         });
         let (resolve, transcript_token, text_output) =
             (pipeline.clone(), token.clone(), output_tx.clone());
+        let text_usage = usage.clone();
         let text = tokio::spawn(async move {
             loop {
                 let response = tokio::select! { _ = stopped(&transcript_token) => break, value = transcripts.next() => match value { Some(v) => v, None => break } };
@@ -127,6 +141,16 @@ impl TranscriberWorker {
                         continue;
                     }
                 };
+                let usage = text_usage.read().expect("speaker usage lock poisoned").clone();
+                if !usage.is_available() {
+                    continue;
+                }
+                usage.report(
+                    "deepgram",
+                    response.estimated_cost.to_string().parse().unwrap_or_default(),
+                    response.usage_quantity,
+                    response.usage_unit.clone(),
+                );
                 if response.transcript.trim().is_empty() {
                     continue;
                 }
@@ -219,7 +243,7 @@ impl TranscriberWorker {
             }
         });
         Ok((
-            Self::from_speaker_parts(token, input_tx, vec![ingest, text, events]),
+            Self::from_speaker_parts(token, input_tx, vec![ingest, text, events], usage),
             pipeline,
         ))
     }
@@ -276,13 +300,25 @@ impl SpaceWorker {
         transcriber: Box<dyn Transcriber>,
         options: SpeakerOptions,
     ) -> Result<Self> {
+        Self::new_with_speakers_and_usage(
+            space_id, transcriber, options, UsageReporter::disabled(),
+        ).await
+    }
+
+    pub async fn new_with_speakers_and_usage(
+        space_id: Id,
+        transcriber: Box<dyn Transcriber>,
+        options: SpeakerOptions,
+        usage: UsageReporter,
+    ) -> Result<Self> {
         let (output_tx, output_rx) = tokio::sync::broadcast::channel(64);
         let (space_transcriber, speaker_pipeline) =
-            TranscriberWorker::new_with_speakers(space_id, transcriber, options, output_tx.clone())
+            TranscriberWorker::new_with_speakers_and_usage(space_id, transcriber, options, output_tx.clone(), usage.clone())
                 .await?;
         Ok(Self {
             state: Arc::new(futures_util::lock::Mutex::new(SpaceState {
                 space_id,
+                usage,
                 token: common::prelude::CancellationToken::new(),
                 space_transcriber,
                 user_transcribers: Default::default(),

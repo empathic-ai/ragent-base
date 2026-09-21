@@ -17,13 +17,13 @@ pub mod web_speech_transcriber;
 #[cfg(target_arch = "wasm32")]
 pub use web_speech_transcriber::*;
 
-use std::error::Error;
 use bytes::Bytes;
 use crossbeam::channel::RecvError;
+use std::error::Error;
 //use futures::channel::mpsc::{self, Sender, Receiver};
-use tokio::sync::broadcast::{self, Sender, Receiver};
 use anyhow::Result;
 use futures::channel::mpsc;
+use tokio::sync::broadcast::{self, Receiver, Sender};
 
 use async_trait::async_trait;
 use common::prelude::*;
@@ -42,7 +42,12 @@ pub fn channel() -> (Sender<Bytes>, Receiver<Bytes>) {
 
 #[async_trait]
 pub trait Transcriber: Send + Sync {
-    async fn transcribe_stream(&mut self, sample_rate: u32, stream: Receiver<Bytes>, token: CancellationToken) -> Result<mpsc::UnboundedReceiver<Result<TranscriptionResponse>>>;
+    async fn transcribe_stream(
+        &mut self,
+        sample_rate: u32,
+        stream: Receiver<Bytes>,
+        token: CancellationToken,
+    ) -> Result<mpsc::UnboundedReceiver<Result<TranscriptionResponse>>>;
 }
 
 #[derive(Clone, Default)]
@@ -61,4 +66,6 @@ pub struct TranscriptionResponse {
     pub end_seconds: Option<f64>,
     pub is_final: bool,
     pub speech_final: bool,
+    pub usage_quantity: f32,
+    pub usage_unit: String,
 }

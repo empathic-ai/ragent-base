@@ -31,8 +31,8 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 use crate::prelude::*;
-use futures_util::{Stream, FutureExt, StreamExt, stream, TryStreamExt};
 use anyhow::Result;
+use futures_util::{FutureExt, Stream, StreamExt, TryStreamExt, stream};
 
 use dyn_clone::DynClone;
 
@@ -105,7 +105,9 @@ pub struct Function {
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct ChatCompletionResponse {
     pub completion: String,
-    pub estimated_cost: Decimal
+    pub estimated_cost: Decimal,
+    pub usage_quantity: f32,
+    pub usage_unit: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -113,7 +115,7 @@ pub struct ChatCompletionChoice {
     pub index: i64,
     pub message: Option<ChatCompletionMessageForResponse>,
     //pub finish_reason: Option<FinishReason>,
-    pub delta: ChatCompletionMessageForResponse
+    pub delta: ChatCompletionMessageForResponse,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -128,10 +130,13 @@ pub struct ChatCompletionMessageForResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct FunctionParameters {
-}
+pub struct FunctionParameters {}
 
 #[async_trait]
 pub trait ChatCompleter: Send + Sync + DynClone {
-    async fn get_response(&mut self, messages: Vec<ChatCompletionMessage>, task_configs: Vec<TaskConfig>) -> Result<Pin<Box<dyn Stream<Item = Result<ChatCompletionResponse>> + Send>>>;
+    async fn get_response(
+        &mut self,
+        messages: Vec<ChatCompletionMessage>,
+        task_configs: Vec<TaskConfig>,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatCompletionResponse>> + Send>>>;
 }

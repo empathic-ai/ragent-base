@@ -16,7 +16,7 @@ server = []
 serde = ["dep:serde", "serde_with"]
 bevy_reflect = ["serde", "flux/bevy_reflect", "dep:bevy_reflect"]
 bevy = ["bevy_reflect", "dep:bevy", "ragent_core/bevy", "common/bevy", "flux/bevy", "bevy-trait-query"]
-candle = ["candle-core", "candle-nn", "candle-transformers", "hf-hub", "symphonia", "async-stream", "tokenizers"]
+candle = ["candle-core", "candle-nn", "candle-transformers", "hf-hub", "symphonia", "async-stream", "tokenizers", "dep:image", "dep:tracing-chrome", "dep:tracing-subscriber"]
 anthropic = ["dep:anthropic"]
 dynamic_linking = ["bevy?/dynamic_linking", "flux/dynamic_linking", "ragent_core/dynamic_linking"]
 tonic = ["dep:tonic", "prost", "dep:tonic-build"]
@@ -31,7 +31,8 @@ pyannote = ["speaker-identification", "tokio-tungstenite/rustls-tls-webpki-roots
 polyvoice = ["speaker-identification", "dep:polyvoice"]
 
 [dependencies]
-log = { version = "0.4.20", features = ["max_level_debug", "release_max_level_warn"] }
+log = "0.4.20"
+tracing = { version = "0.1", default-features = false, features = ["std"] }
 bevy_reflect = { git = "https://github.com/empathic-ai/bevy.git", branch = "reflect/serializable-dynamic-types", default-features = false, features = ["uuid"], optional = true }
 bevy = { git = "https://github.com/empathic-ai/bevy.git", branch = "reflect/serializable-dynamic-types", default-features = false, optional = true }
 # TODO: Replace with crates.io reference once Tonic officially supports Axum v0.8
@@ -61,13 +62,12 @@ ringbuf = "0.4.1"
 # Removed feature due to web compatibility issues: "jpeg"
 rust_decimal = "1.36"
 rust_decimal_macros = "1.36"
-image = { version = "0.25.0", default-features = false, features = ["png"] }
+image = { version = "0.25.0", default-features = false, features = ["png"], optional = true }
 delune = { git = "https://github.com/empathic-ai/delune.git" }
 bevy-trait-query = { git = "https://github.com/Catchawink/bevy-trait-query.git", branch = "reflect/serializable-dynamic-types", optional = true }
 base64 = "0.22.1"
 serde_json = "1.0"
 regex = "1.7.1"
-fancy-regex = "0.11.0"
 substring = "1.4.5"
 uuid = { version = "1.13", features = ["v4"] }
 tokio = { version = "1.32.0", default-features = false, features = ["macros", "rt", "sync"], optional = true }
@@ -82,8 +82,8 @@ futures-util = { version = "0.3.31", optional = true }
 futures-lite = { version = "2.3.0", optional = true }
 async-compat = "0.2.4"
 # rodio = "0.17.3"
-tracing-chrome = "0.7.2"
-tracing-subscriber = "0.3.18"
+tracing-chrome = { version = "0.7.2", optional = true }
+tracing-subscriber = { version = "0.3.18", optional = true }
 rand = "0.8.5"
 byteorder = "1.5.0"
 symphonia = { version = "0.5.4", default-features = false, optional = true }
@@ -92,8 +92,7 @@ symphonia = { version = "0.5.4", default-features = false, optional = true }
 tokio-util = { version = "0.7", features = ["rt"], optional = true }
 sha2 = { version = "0.10", optional = true }
 polyvoice = { version = "=0.19.0", default-features = false, features = ["embedder-native"], optional = true }
-openai-api-rs = { version = "10.0.1", optional = true }
-# openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git", optional = true }
+openai-api-rs = { git = "https://github.com/Catchawink/openai-api-rs.git", optional = true }
 deepgram = { git = "https://github.com/empathic-ai/deepgram-rust-sdk.git", optional = true }
 anthropic = { git = "https://github.com/AbdelStark/anthropic-rs.git", default-features = false, optional = true }
 tokio-tungstenite = { version = "0.24.0", optional = true }

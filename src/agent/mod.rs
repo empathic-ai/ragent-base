@@ -1,7 +1,6 @@
 use bevy::reflect::{DynamicStruct, Enum, EnumInfo, Typed, ReflectRef};
 use serde_json::Value;
 //use gloo_console as console;
-use fancy_regex::Regex;
 //use common::prelude::*;
 use std::time::SystemTime;
 use tokio::runtime::Handle;
@@ -30,6 +29,7 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 
 pub mod agent_worker;
+mod text_patterns;
 pub use agent_worker::*;
 
 // TODO: Reimplement with audio graph

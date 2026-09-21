@@ -18,13 +18,13 @@ pub fn device(cpu: bool) -> Result<Device> {
     } else {
         #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
         {
-            println!(
+            tracing::debug!(
                 "Running on CPU, to run on GPU(metal), build this example with `--features metal`"
             );
         }
         #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
         {
-            println!("Running on CPU, to run on GPU, build this example with `--features cuda`");
+            tracing::debug!("Running on CPU, to run on GPU, build this example with `--features cuda`");
         }
         Ok(Device::Cpu)
     }
