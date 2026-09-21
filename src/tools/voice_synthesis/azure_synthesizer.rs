@@ -1,10 +1,10 @@
-use reqwest::header::{HeaderMap, HeaderValue};
-use tokio::sync::Semaphore;
-use std::{error::Error, collections::HashMap, env};
 use super::*;
-use lazy_static::lazy_static;
-use async_trait::async_trait;
 use anyhow::Result;
+use async_trait::async_trait;
+use lazy_static::lazy_static;
+use reqwest::header::{HeaderMap, HeaderValue};
+use std::{collections::HashMap, env, error::Error};
+use tokio::sync::Semaphore;
 
 lazy_static! {
     pub static ref VOICE_NAME_BY_NAME: HashMap<String, String> = {
@@ -30,12 +30,15 @@ lazy_static! {
 #[derive(Debug)]
 pub struct AzureSynthesizer {
     pub api_key: String,
-    semaphore: Semaphore
+    semaphore: Semaphore,
 }
 
 impl AzureSynthesizer {
     pub fn new_from_env() -> AzureSynthesizer {
-        AzureSynthesizer { api_key: env::var("AZURE_API_KEY").unwrap(), semaphore: Semaphore::new(2) }
+        AzureSynthesizer {
+            api_key: env::var("AZURE_API_KEY").unwrap(),
+            semaphore: Semaphore::new(2),
+        }
     }
 }
 
@@ -43,7 +46,12 @@ impl AzureSynthesizer {
 impl Synthesizer for AzureSynthesizer {
     /// Refresh the access token. It is recommended to run this command after creating the client
     /// Default sample rate of 24000
-    async fn create_speech(&self, emotion: String, voice_name: String, text: String) -> Result<SynthesisResult> {
+    async fn create_speech(
+        &self,
+        emotion: String,
+        voice_name: String,
+        text: String,
+    ) -> Result<SynthesisResult> {
         let _permit = self.semaphore.acquire().await?;
 
         let voice_name = VOICE_NAME_BY_NAME.get(&voice_name).unwrap();
@@ -57,7 +65,7 @@ impl Synthesizer for AzureSynthesizer {
         //<prosody rate="+10.00%">
         //</prosody>
         let ssml = format!(
-r#"<!--ID=B7267351-473F-409D-9765-754A8EBCDE05;Version=1|{{"VoiceNameToIdMapItems":[{{"Id":"520f8b71-e1cc-4e80-b9ea-006d2f816864","Name":"Microsoft Server Speech Text to Speech Voice (en-US, {})","ShortName":"{}","Locale":"en-US","VoiceType":"StandardVoice"}}]}}-->
+            r#"<!--ID=B7267351-473F-409D-9765-754A8EBCDE05;Version=1|{{"VoiceNameToIdMapItems":[{{"Id":"520f8b71-e1cc-4e80-b9ea-006d2f816864","Name":"Microsoft Server Speech Text to Speech Voice (en-US, {})","ShortName":"{}","Locale":"en-US","VoiceType":"StandardVoice"}}]}}-->
 <!--ID=5B95B1CC-2C7B-494F-B746-CF22A0E779B7;Version=1|null-->
 <speak xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts" xmlns:emo="http://www.w3.org/2009/10/emotionml" version="1.0" xml:lang="en-US"><voice name="{}"><mstts:express-as style='{}'>{}</mstts:express-as></voice></speak>"#,
             short_voice_name,
@@ -68,48 +76,61 @@ r#"<!--ID=B7267351-473F-409D-9765-754A8EBCDE05;Version=1|{{"VoiceNameToIdMapItem
         );
 
         //print!("BODY: {}", ssml);
-    
+
         let url = "https://eastus.api.cognitive.microsoft.com/sts/v1.0/issueToken";
-    
+
         let mut headers = HeaderMap::new();
-        headers.insert("content-type", HeaderValue::from_static("application/x-www-form-urlencoded"));
+        headers.insert(
+            "content-type",
+            HeaderValue::from_static("application/x-www-form-urlencoded"),
+        );
         headers.insert("content-length", HeaderValue::from_static("0"));
-        headers.insert("Ocp-Apim-Subscription-Key", HeaderValue::from_str(&self.api_key)?);
-    
+        headers.insert(
+            "Ocp-Apim-Subscription-Key",
+            HeaderValue::from_str(&self.api_key)?,
+        );
+
         let client = reqwest::Client::new();
-        let response = client.post(url)
-            .headers(headers)
-            .send()
-            .await?;
-    
-        let x = response.status();//.as_str();
-    
+        let response = client.post(url).headers(headers).send().await?;
+
+        let x = response.status(); //.as_str();
+
         //println!("Headers:\n{:#?}", response.headers());
         let body = response.text().await?;
-    
+
         let url = "https://eastus.tts.speech.microsoft.com/cognitiveservices/v1";
         let authorization = "Bearer ".to_owned() + body.clone().as_str();
-    
+
         let mut headers = HeaderMap::new();
-    
+
         // raw-16khz-16bit-mono-pcm
-        headers.insert("X-Microsoft-OutputFormat", HeaderValue::from_static("raw-48khz-16bit-mono-pcm"));
-        headers.insert("content-type", HeaderValue::from_static("application/ssml+xml"));
+        headers.insert(
+            "X-Microsoft-OutputFormat",
+            HeaderValue::from_static("raw-48khz-16bit-mono-pcm"),
+        );
+        headers.insert(
+            "content-type",
+            HeaderValue::from_static("application/ssml+xml"),
+        );
         headers.insert("Authorization", HeaderValue::from_str(&authorization)?);
         headers.insert("user-agent", HeaderValue::from_static("Meridian"));
-    
-        let response = client.post(url)
+
+        let response = client
+            .post(url)
             .headers(headers)
             .body(ssml.clone())
             .send()
             .await?;
-    
+
         //println!("Generated speech: {}", ssml.clone());
-        
+
         let bytes = response.bytes().await?;
-    
-        Ok(SynthesisResult { bytes: bytes.to_vec(), ..Default::default() })
-        /* 
+
+        Ok(SynthesisResult {
+            bytes: bytes.to_vec(),
+            ..Default::default()
+        })
+        /*
 
         let url = "https://e6fz4wogoa.execute-api.us-east-2.amazonaws.com/default/azure-tts";
 
@@ -143,7 +164,6 @@ r#"<!--ID=B7267351-473F-409D-9765-754A8EBCDE05;Version=1|{{"VoiceNameToIdMapItem
         //console::info!("Generating speech: ", text.clone());
         */
 
-
         //gender='Male' name='en-US-ChristopherNeural' - emotionless voice but good Lao Tzu voice
         // en-US-GuyNeural -- very enthusiastic male voice
         //gender='Female' name='en-US-AnaNeural' - really cute, funny young girl voice
@@ -176,8 +196,6 @@ r#"<!--ID=B7267351-473F-409D-9765-754A8EBCDE05;Version=1|{{"VoiceNameToIdMapItem
             //browser_sleep(duration).await;
         };
         */
-
-        
     }
 
     /* TODO: Implement with AWS Lamda functions later

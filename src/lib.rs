@@ -39,6 +39,9 @@ pub use flux::prelude::Id;
 mod types;
 #[cfg(feature = "bevy_reflect")]
 use types::*;
+#[cfg(feature = "bevy_reflect")]
+#[cfg(feature = "futures")]
+mod usage;
 
 //#[cfg(feature = "bevy")]
 //use prelude::{get_event_name_from_type, get_event_name_from_type_name, SpeakEvent};
@@ -84,6 +87,9 @@ pub mod prelude {
     pub use crate::tools::*;
     #[cfg(feature = "bevy_reflect")]
     pub use crate::types::*;
+    #[cfg(feature = "bevy_reflect")]
+    #[cfg(feature = "futures")]
+    pub use crate::usage::*;
     #[cfg(feature = "bevy")]
     pub use flux::prelude::Id;
 }

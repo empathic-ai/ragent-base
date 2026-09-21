@@ -1,6 +1,6 @@
+use super::*;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use super::*;
 
 #[cfg(feature = "mkl")]
 extern crate intel_mkl_src;
@@ -16,11 +16,11 @@ use candle_transformers::models::encodec;
 use candle_transformers::models::metavoice::{adapters, gpt, tokenizers, transformer};
 use candle_transformers::models::quantized_metavoice::transformer as qtransformer;
 
+use crate::prelude::candle_helpers;
 use candle_core::{DType, IndexOp, Tensor};
 use candle_nn::VarBuilder;
 use hf_hub::api::sync::Api;
-use rand::{distributions::Distribution, SeedableRng};
-use crate::prelude::candle_helpers;
+use rand::{SeedableRng, distributions::Distribution};
 
 pub const ENCODEC_NTOKENS: u32 = 1024;
 
@@ -300,18 +300,22 @@ fn main() -> Result<()> {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct CandleSynthesizer {
-}
+pub struct CandleSynthesizer {}
 
 impl CandleSynthesizer {
     pub fn new() -> Self {
-        Self { }
+        Self {}
     }
 }
 
 #[async_trait]
 impl Synthesizer for CandleSynthesizer {
-    async fn create_speech(&self, emotion: String, voice_name: String, text: String) -> Result<SynthesisResult> {
+    async fn create_speech(
+        &self,
+        emotion: String,
+        voice_name: String,
+        text: String,
+    ) -> Result<SynthesisResult> {
         todo!();
     }
 }

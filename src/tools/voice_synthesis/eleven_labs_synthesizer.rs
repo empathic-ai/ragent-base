@@ -1,11 +1,11 @@
 use bevy::log::info;
 use reqwest::header::HeaderMap;
 
+use anyhow::{Result, anyhow};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::{env, str::FromStr};
-use anyhow::{Result, anyhow};
 use tokio::sync::Semaphore;
-use rust_decimal::Decimal;
 
 use super::super::eleven_labs_helpers::VOICE_ID_BY_NAME;
 use super::*;
@@ -64,18 +64,14 @@ impl Synthesizer for ElevenLabsSynthesizer {
         let mut headers = HeaderMap::new();
         headers.insert("accept", "application/json".parse().unwrap());
         headers.insert("content-type", "application/json".parse().unwrap());
-        headers.insert(
-            "xi-api-key",
-            self.api_key.parse().unwrap(),
-        );
+        headers.insert("xi-api-key", self.api_key.parse().unwrap());
 
         let model = "eleven_flash_v2_5";
 
         let response = client
             .post(format!(
                 "https://api.elevenlabs.io/v1/text-to-speech/{}/stream?output_format={}",
-                voice_id,
-                self.format
+                voice_id, self.format
             ))
             .json(&VoiceStreamRequest {
                 text: text.clone(),
@@ -100,16 +96,15 @@ impl Synthesizer for ElevenLabsSynthesizer {
                 // Fallback if ElevenLabs ever omits the header.
                 .unwrap_or_else(|| Decimal::from(text.chars().count() as u64));
 
-            let cost = calculate_cost(
-                model,
-                billed_characters,
-            );
+            let cost = calculate_cost(model, billed_characters);
 
             let bytes = response.bytes().await?;
 
             Ok(SynthesisResult {
                 bytes: bytes.to_vec(),
                 cost,
+                usage_quantity: billed_characters.to_string().parse().unwrap_or_default(),
+                usage_unit: "characters".to_string(),
             })
         } else {
             let status = response.status();
@@ -128,16 +123,12 @@ impl Synthesizer for ElevenLabsSynthesizer {
 ///
 /// `billed_characters` should preferably come from ElevenLabs' `character-cost`
 /// response header rather than being calculated locally.
-fn calculate_cost(
-    model_name: &str,
-    billed_characters: Decimal,
-) -> Decimal {
+fn calculate_cost(model_name: &str, billed_characters: Decimal) -> Decimal {
     let cost_per_1k_characters = match model_name {
         // Flash / Turbo API pricing: $0.05 / 1K characters
-        "eleven_flash_v2_5"
-        | "eleven_flash_v2"
-        | "eleven_turbo_v2_5"
-        | "eleven_turbo_v2" => Decimal::new(5, 2),
+        "eleven_flash_v2_5" | "eleven_flash_v2" | "eleven_turbo_v2_5" | "eleven_turbo_v2" => {
+            Decimal::new(5, 2)
+        }
 
         // Multilingual v2 API pricing: $0.10 / 1K characters
         "eleven_multilingual_v2" => Decimal::new(10, 2),

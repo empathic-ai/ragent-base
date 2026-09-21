@@ -1,11 +1,16 @@
-use reqwest::header::{HeaderMap, HeaderValue};
-use tokio::sync::Semaphore;
-use std::{error::Error, collections::HashMap, env};
 use super::*;
-use lazy_static::lazy_static;
-use openai_api_rs::v1::{api::{OpenAIClient, OpenAIClientBuilder}, audio::AudioSpeechRequest, image::ImageGenerationRequest, *};
-use futures_util::{Stream, FutureExt, StreamExt, stream, TryStreamExt};
 use async_trait::async_trait;
+use futures_util::{FutureExt, Stream, StreamExt, TryStreamExt, stream};
+use lazy_static::lazy_static;
+use openai_api_rs::v1::{
+    api::{OpenAIClient, OpenAIClientBuilder},
+    audio::AudioSpeechRequest,
+    image::ImageGenerationRequest,
+    *,
+};
+use reqwest::header::{HeaderMap, HeaderValue};
+use std::{collections::HashMap, env, error::Error};
+use tokio::sync::Semaphore;
 
 lazy_static! {
     pub static ref VOICE_NAME_BY_NAME: HashMap<String, String> = {
@@ -22,18 +27,25 @@ lazy_static! {
 
 #[derive(Debug, Clone)]
 pub struct OpenAISynthesizer {
-    pub api_key: String
+    pub api_key: String,
 }
 
 impl OpenAISynthesizer {
     pub fn new_from_env() -> OpenAISynthesizer {
-        OpenAISynthesizer { api_key: env::var("OPENAI_API_KEY").unwrap() }
+        OpenAISynthesizer {
+            api_key: env::var("OPENAI_API_KEY").unwrap(),
+        }
     }
 }
 
 #[async_trait]
 impl Synthesizer for OpenAISynthesizer {
-    async fn create_speech(&self, emotion: String, voice_name: String, text: String) -> Result<SynthesisResult> {
+    async fn create_speech(
+        &self,
+        emotion: String,
+        voice_name: String,
+        text: String,
+    ) -> Result<SynthesisResult> {
         // TODO: Rework as this crate's implementation only allows outputting to a file
         // My own personal fork handles this better--will need to update fork to latest version but include respone with bytes
         todo!()

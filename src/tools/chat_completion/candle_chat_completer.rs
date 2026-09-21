@@ -1,9 +1,9 @@
 use crate::prelude::*;
-use std::{pin::Pin, *};
-use futures::Stream;
-use futures_util::{StreamExt, stream};
 use anyhow::*;
 use async_trait::async_trait;
+use futures::Stream;
+use futures_util::{StreamExt, stream};
+use std::{pin::Pin, *};
 
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
@@ -13,15 +13,15 @@ use candle_transformers::models::quantized_mixformer::MixFormerSequentialForCaus
 
 use candle_transformers::models::phi::{Config as PhiConfig, Model as Phi};
 use candle_transformers::models::phi3::{Config as Phi3Config, Model as Phi3};
-#[cfg(not(target_arch = "wasm32"))]
-use hf_hub::api::sync::Api;
 use hf_hub::Repo;
 use hf_hub::RepoType;
+#[cfg(not(target_arch = "wasm32"))]
+use hf_hub::api::sync::Api;
 //use candle_wasm_example_phi::console_log;
 //use js_sys::Date;
 use serde::Deserialize;
-use tokenizers::Tokenizer;
 use std::result::Result::Ok;
+use tokenizers::Tokenizer;
 
 use candle_helpers::token_output_stream::TokenOutputStream;
 //use wasm_bindgen::prelude::*;
@@ -63,7 +63,6 @@ pub struct Model {
     verbose_prompt: bool,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 
 pub struct ModelName {
@@ -102,7 +101,6 @@ struct Args {
 impl Model {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn new(args: Args) -> Result<Self> {
-  
         tracing::debug!(
             "avx: {}, neon: {}, simd128: {}, f16c: {}",
             candle_core::utils::with_avx(),
@@ -116,7 +114,7 @@ impl Model {
             args.repeat_penalty,
             args.repeat_last_n
         );
-    
+
         let start = std::time::Instant::now();
         let api = Api::new()?;
         let model_id = match args.model_id {
@@ -189,21 +187,26 @@ impl Model {
                 } else {
                     match args.model {
                         WhichModel::V1 | WhichModel::V1_5 => vec![repo.get("model.safetensors")?],
-                        WhichModel::V2 | WhichModel::V2Old | WhichModel::V3 | WhichModel::V3Medium => {
-                            candle_helpers::hub_load_safetensors(
-                                &repo,
-                                "model.safetensors.index.json",
-                            )?
+                        WhichModel::V2
+                        | WhichModel::V2Old
+                        | WhichModel::V3
+                        | WhichModel::V3Medium => candle_helpers::hub_load_safetensors(
+                            &repo,
+                            "model.safetensors.index.json",
+                        )?,
+                        WhichModel::PuffinPhiV2 => {
+                            vec![repo.get("model-puffin-phi-v2.safetensors")?]
                         }
-                        WhichModel::PuffinPhiV2 => vec![repo.get("model-puffin-phi-v2.safetensors")?],
-                        WhichModel::PhiHermes => vec![repo.get("model-phi-hermes-1_3B.safetensors")?],
+                        WhichModel::PhiHermes => {
+                            vec![repo.get("model-phi-hermes-1_3B.safetensors")?]
+                        }
                     }
                 }
             }
         };
         tracing::debug!("retrieved the files in {:?}", start.elapsed());
         let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(anyhow::Error::msg)?;
-    
+
         let start = std::time::Instant::now();
         let config = || match args.model {
             WhichModel::V1 => Config::v1(),
@@ -294,8 +297,7 @@ impl Model {
         let config: Config = serde_json::from_slice(&config)?;
 
         //console_log!("config loaded {:?}", name);
-        let tokenizer =
-            Tokenizer::from_bytes(&tokenizer).map_err(|m| anyhow!(m.to_string()))?;
+        let tokenizer = Tokenizer::from_bytes(&tokenizer).map_err(|m| anyhow!(m.to_string()))?;
         //let start = Date::now();
         //console_log!("weights len: {:?}", weights.len());
         let model = if quantized {
@@ -329,9 +331,13 @@ impl Model {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn run(mut self, prompt: String, sample_len: usize) -> impl Stream<Item = anyhow::Result<String>> {
+    pub fn run(
+        mut self,
+        prompt: String,
+        sample_len: usize,
+    ) -> impl Stream<Item = anyhow::Result<String>> {
         async_stream::try_stream! {
-                
+
             //use std::io::Write;
 
             use candle_core::IndexOp;
@@ -414,7 +420,7 @@ impl Model {
     ) -> Result<String> {
         match &mut self.model {
             SelectedModel::MixFormer(m) => m.clear_kv_cache(),
-            SelectedModel::Quantized(m) => m.clear_kv_cache()
+            SelectedModel::Quantized(m) => m.clear_kv_cache(),
         };
         let temp = if temp <= 0. { None } else { Some(temp) };
         let top_p = if top_p <= 0. || top_p >= 1. {
@@ -427,13 +433,13 @@ impl Model {
         self.repeat_last_n = repeat_last_n;
         self.tokens.clear();
         let tokens = self
-            .tokenizer.tokenizer()
+            .tokenizer
+            .tokenizer()
             .encode(prompt, true)
             .map_err(anyhow::Error::msg)?
             .get_ids()
             .to_vec();
-        let text = self
-            .process(&tokens)?;
+        let text = self.process(&tokens)?;
         Ok(text)
     }
     //#[wasm_bindgen]
@@ -441,8 +447,7 @@ impl Model {
     #[cfg(target_arch = "wasm32")]
     pub fn next_token(&mut self) -> Result<String> {
         let last_token = *self.tokens.last().unwrap();
-        let text = self
-            .process(&[last_token])?;
+        let text = self.process(&[last_token])?;
         Ok(text)
     }
 }
@@ -483,65 +488,79 @@ impl Model {
 }
 
 #[derive(Clone)]
-pub struct CandleChatCompleter {
-
-}
+pub struct CandleChatCompleter {}
 
 impl CandleChatCompleter {
     pub fn new() -> Self {
-        Self { }
+        Self {}
     }
 }
 
 #[async_trait]
 impl ChatCompleter for CandleChatCompleter {
     #[cfg(not(target_arch = "wasm32"))]
-    async fn get_response(&mut self, messages: Vec<super::ChatCompletionMessage>, task_configs: Vec<TaskConfig>) -> Result<Pin<Box<dyn Stream<Item = Result<super::ChatCompletionResponse>> + Send>>> {
-
+    async fn get_response(
+        &mut self,
+        messages: Vec<super::ChatCompletionMessage>,
+        task_configs: Vec<TaskConfig>,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<super::ChatCompletionResponse>> + Send>>> {
         let mut prompt = "".to_string();
 
         for message in messages {
             let role = match message.role {
-                MessageRole::user => {
-                    "Human"
-                },
-                MessageRole::system => {
-                    "System"
-                },
-                MessageRole::assistant => {
-                    "AI"
-                },
+                MessageRole::user => "Human",
+                MessageRole::system => "System",
+                MessageRole::assistant => "AI",
                 MessageRole::function => todo!(),
             };
-            
+
             prompt += &format!("{}: {:?}\n", role, message.content);
         }
 
         prompt += "AI:";
 
-        let mut model = Model::new(Args { cpu: false, tracing: false, verbose_prompt: false, mmlu_dir: None, temperature: None, top_p: None, seed: 299792458, model_id: None, model: WhichModel::V2, revision: None, weight_file: None, tokenizer: None, quantized: true, repeat_penalty: 1.1, repeat_last_n: 64, dtype: None })?;
+        let mut model = Model::new(Args {
+            cpu: false,
+            tracing: false,
+            verbose_prompt: false,
+            mmlu_dir: None,
+            temperature: None,
+            top_p: None,
+            seed: 299792458,
+            model_id: None,
+            model: WhichModel::V2,
+            revision: None,
+            weight_file: None,
+            tokenizer: None,
+            quantized: true,
+            repeat_penalty: 1.1,
+            repeat_last_n: 64,
+            dtype: None,
+        })?;
 
         let stream = model.run(prompt, 5000);
-        let stream = stream.map(|x| {
-            match x {
-                Ok(x) => {
-                    tracing::debug!("GOT RESPONSE: '{}'", x);
-                    Ok(super::ChatCompletionResponse {
-                        completion: x,
-                        ..Default::default()
-                    })
-                },
-                Err(e) => {
-                    tracing::warn!("ERROR GETTING CHAT RESPONSE: {}", e);
-                    Err(e)
-                },
+        let stream = stream.map(|x| match x {
+            Ok(x) => {
+                tracing::debug!("GOT RESPONSE: '{}'", x);
+                Ok(super::ChatCompletionResponse {
+                    completion: x,
+                    ..Default::default()
+                })
+            }
+            Err(e) => {
+                tracing::warn!("ERROR GETTING CHAT RESPONSE: {}", e);
+                Err(e)
             }
         });
         Ok(Box::pin(stream))
     }
 
     #[cfg(target_arch = "wasm32")]
-    async fn get_response(&mut self, messages: Vec<super::ChatCompletionMessage>, task_configs: Vec<TaskConfig>) -> Result<Pin<Box<dyn Stream<Item = Result<super::ChatCompletionResponse>> + Send>>> {
+    async fn get_response(
+        &mut self,
+        messages: Vec<super::ChatCompletionMessage>,
+        task_configs: Vec<TaskConfig>,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<super::ChatCompletionResponse>> + Send>>> {
         // Refer to existing wasm32 supported code above
         todo!()
     }

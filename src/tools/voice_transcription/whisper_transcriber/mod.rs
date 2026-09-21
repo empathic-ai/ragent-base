@@ -316,7 +316,12 @@ impl Decoder {
                                 .tokenizer
                                 .decode(&tokens_to_decode, true)
                                 .map_err(E::msg)?;
-                            tracing::debug!("  {:.1}s-{:.1}s: {}", prev_timestamp_s, timestamp_s, text);
+                            tracing::debug!(
+                                "  {:.1}s-{:.1}s: {}",
+                                prev_timestamp_s,
+                                timestamp_s,
+                                text
+                            );
                             tokens_to_decode.clear()
                         }
                         prev_timestamp_s = timestamp_s;
