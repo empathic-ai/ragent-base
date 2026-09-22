@@ -31,6 +31,12 @@ feature solely because its source is retained.
 `docs/legacy/build.rs.txt` also retains the original protocol build script,
 including its explicit output-directory setup and generator branching.
 
+## Speaker identification
+
+See [speaker identification](docs/speaker-identification.md) for the opt-in
+native pipeline, provider configuration, audio contracts, enrollment, testing,
+and offline evaluation workflow.
+
 
 ## Logging
 
