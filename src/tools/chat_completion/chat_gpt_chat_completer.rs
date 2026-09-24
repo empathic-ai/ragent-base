@@ -98,7 +98,7 @@ impl ChatCompleter for ChatGPTChatCompleter {
 
         let mut functions = Vec::<openai_api_rs::v1::types::Function>::new();
 
-        let model = GPT4_O; // GPT4_0613.to_string();
+        let model = GPT5_6_LUNA; // GPT4_0613.to_string();
 
         // TODO: Uncomment and use is_function_model() if built-in functions are preferable
         let is_function_model = false; //Self::is_function_model(model_name.clone());
@@ -149,6 +149,7 @@ impl ChatCompleter for ChatGPTChatCompleter {
         }
 
         let chat_completion_request = ChatCompletionStreamRequest::new(model.to_string(), messages)
+        .reasoning_effort(ReasoningEffort::None)
             .stream_options(StreamOptions {
                 include_usage: true,
             });
@@ -222,6 +223,12 @@ fn calculate_cost(model: &str, usage: &openai_api_rs::v1::common::Usage) -> Resu
     let uncached_tokens = usage.prompt_tokens - cached_tokens;
 
     let (input_price, cached_input_price, output_price) = match model {
+        GPT5_6 | GPT5_6_SOL => (dec!(4.00), dec!(0.40), dec!(20.00)),
+
+        GPT5_6_TERRA => (dec!(2.00), dec!(0.20), dec!(12.00)),
+
+        GPT5_6_LUNA => (dec!(0.20), dec!(0.02), dec!(1.20)),
+
         GPT4_O | GPT4_O_2024_08_06 | GPT4_O_2024_11_20 => (dec!(2.50), dec!(1.25), dec!(10.00)),
 
         GPT4_O_2024_05_13 => (dec!(5.00), dec!(5.00), dec!(15.00)),
@@ -253,6 +260,28 @@ fn calculate_cost(model: &str, usage: &openai_api_rs::v1::common::Usage) -> Resu
         O3_MINI | O3_MINI_2025_01_31 => (dec!(1.10), dec!(0.55), dec!(4.40)),
 
         O4_MINI | O4_MINI_2025_04_16 => (dec!(1.10), dec!(0.275), dec!(4.40)),
+
+        GPT_REALTIME_2_1 | GPT_REALTIME_2 => (dec!(4.00), dec!(0.40), dec!(24.00)),
+
+        GPT_REALTIME_2_1_MINI => (dec!(0.60), dec!(0.06), dec!(2.40)),
+
+        GPT_REALTIME_TRANSLATE | GPT_LIVE_TRANSCRIBE | GPT_REALTIME_WHISPER | GPT_TRANSCRIBE => {
+            return Err(anyhow!(
+                "OpenAI model `{model}` is billed per minute, not by chat completion tokens"
+            ));
+        }
+
+        GPT_IMAGE_2 => {
+            return Err(anyhow!(
+                "OpenAI model `{model}` uses separate text and image token prices that cannot be calculated from chat completion usage"
+            ));
+        }
+
+        GPT_OSS_120B | GPT_OSS_20B => {
+            return Err(anyhow!(
+                "OpenAI model `{model}` is open-weight and has no OpenAI API token pricing"
+            ));
+        }
 
         model => {
             return Err(anyhow!("No pricing configured for OpenAI model `{model}`"));
