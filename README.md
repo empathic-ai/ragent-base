@@ -17,6 +17,43 @@ are optional **host** dependencies, so ordinary provider and ESP builds do not
 compile them. Build scripts track the protocol directory and propagate generator
 errors rather than leaving stale or missing output unnoticed.
 
+## Local AI backends
+
+The `local-ai` feature enables `SherpaTranscriber`, `SherpaSynthesizer`, and
+`LlamaCppChatCompleter`. The individual `sherpa` and `llama-cpp` features can
+be enabled when only part of the stack is needed. These modules are excluded
+from WASM and XTensa builds.
+
+```rust,ignore
+use ragent::prelude::*;
+
+let stt = SherpaTranscriber::from_streaming_zipformer(
+	"models/stt/encoder.onnx", "models/stt/decoder.onnx",
+	"models/stt/joiner.onnx", "models/stt/tokens.txt", 16_000,
+)?;
+let tts = SherpaSynthesizer::new(sherpa_onnx::OfflineTtsConfig { /* model paths */ ..Default::default() })?;
+let llm = LlamaCppChatCompleter::from_file("models/llm/model-q4.gguf", Default::default())?;
+```
+
+Sherpa expects external ONNX model files and tokens. Streaming ASR consumes
+little-endian mono PCM16 chunks; TTS returns a PCM16 WAV in `SynthesisResult`.
+Preset speakers use `SherpaVoiceConfig::Preset`; Pocket/ZipVoice-style cloning
+uses `SherpaVoiceConfig::Cloned` with reference PCM and optional transcript.
+Local synthesis and completion report zero external cost.
+
+The llama backend keeps the GGUF model loaded, applies the model's embedded chat
+template, and streams token deltas through `ChatCompletionResponse`. Its context
+and native generation state are confined to a blocking worker because
+`llama-cpp-2` contexts are not `Send`.
+
+`llama-cpp-2` uses the portable CPU path by default. Enable `llama-cpp-metal`
+on Apple targets when the Metal toolchain is available; this is opt-in and CPU
+fallback remains available. Enable `llama-cpp-android` for the crate's Android
+shared C++ runtime configuration. APK packaging still needs the NDK-produced
+native libraries supplied by the application. Sherpa's native
+archive availability must likewise be checked for the selected Android/iOS
+target; model assets are never bundled by Ragent.
+
 Voice IDs such as `child-a` are application aliases. The provider mapping and
 synthesis settings belong here. Moving an alias or changing synthesis settings
 can affect offline voice packs; see the owning application and CLI guides.

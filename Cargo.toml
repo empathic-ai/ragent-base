@@ -17,6 +17,11 @@ serde = ["dep:serde", "serde_with"]
 bevy_reflect = ["serde", "flux/bevy_reflect", "dep:bevy_reflect"]
 bevy = ["bevy_reflect", "dep:bevy", "ragent_core/bevy", "common/bevy", "flux/bevy", "bevy-trait-query"]
 candle = ["candle-core", "candle-nn", "candle-transformers", "hf-hub", "symphonia", "async-stream", "tokenizers", "dep:image", "dep:tracing-chrome", "dep:tracing-subscriber"]
+local-ai = ["sherpa", "llama-cpp"]
+sherpa = ["dep:sherpa-onnx", "tokio"]
+llama-cpp = ["dep:llama-cpp-2", "tokio"]
+llama-cpp-android = ["llama-cpp", "llama-cpp-2/android-shared-stdcxx"]
+llama-cpp-metal = ["llama-cpp", "llama-cpp-2/metal"]
 anthropic = ["dep:anthropic"]
 dynamic_linking = ["bevy?/dynamic_linking", "flux/dynamic_linking", "ragent_core/dynamic_linking"]
 tonic = ["dep:tonic", "prost", "dep:tonic-build"]
@@ -87,6 +92,8 @@ tracing-subscriber = { version = "0.3.18", optional = true }
 rand = "0.8.5"
 byteorder = "1.5.0"
 symphonia = { version = "0.5.4", default-features = false, optional = true }
+sherpa-onnx = { version = "1.13.8", default-features = false, features = ["static"], optional = true }
+llama-cpp-2 = { version = "0.1.157", default-features = false, features = ["common", "sampler"], optional = true }
 
 [target.'cfg(all(not(target_arch = "xtensa"), not(target_arch = "wasm32"), not(target_os = "android")))'.dependencies]
 tokio-util = { version = "0.7", features = ["rt"], optional = true }

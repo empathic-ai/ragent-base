@@ -1,6 +1,6 @@
 #![allow(warnings)]
-use bytes::Bytes;
 use anyhow::Result;
+use bytes::Bytes;
 use std::collections::HashMap;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -15,7 +15,7 @@ pub mod dalle2_image_generator;
 pub mod candle_image_generator;
 
 pub struct ImageResult {
-    pub bytes: Vec<u8>
+    pub bytes: Vec<u8>,
 }
 
 pub trait ImageGenerator {
@@ -24,13 +24,13 @@ pub trait ImageGenerator {
 
 pub mod prelude {
     #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_os = "android"))]
+    #[cfg(feature = "candle")]
+    pub use super::candle_image_generator::*;
+    #[cfg(not(target_arch = "wasm32"))]
     #[cfg(not(target_arch = "xtensa"))]
     #[cfg(not(target_os = "android"))]
     #[cfg(feature = "openai")]
     pub use super::dalle2_image_generator::*;
-    #[cfg(not(target_arch = "wasm32"))]
-    #[cfg(not(target_os = "android"))]
-    #[cfg(feature = "candle")]
-    pub use super::candle_image_generator::*;
     pub use super::*;
 }

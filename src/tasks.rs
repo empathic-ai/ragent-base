@@ -1,18 +1,21 @@
-use std::{sync::Arc, fmt::Debug};
+use std::{fmt::Debug, sync::Arc};
 
 use crate::prelude::*;
 
 use ragent_core::prelude;
 
-use bevy::{prelude::*, reflect::{Typed, ReflectRef, TypeInfo, ReflectMut, DynamicStruct}};
+use bevy::{
+    prelude::*,
+    reflect::{DynamicStruct, ReflectMut, ReflectRef, TypeInfo, Typed},
+};
 use bytes::Bytes;
 use serde::*;
 //use uuid::Uuid;
-use std::time::SystemTime;
-use documented::Documented;
 use anyhow::Result;
 use anyhow::anyhow;
 use common::prelude::*;
+use documented::Documented;
+use std::time::SystemTime;
 
 /*
 // Ensure that the trait bound includes `Send + Sync` to be thread safe
@@ -54,13 +57,13 @@ pub struct TaskConfig {
     pub description: String,
     pub parameters: Vec<Parameter>,
     pub create_task: Arc<dyn CreateTaskFunc>,
-    pub is_available: bool
+    pub is_available: bool,
 }
 
 #[derive(Clone, Debug)]
 pub struct Parameter {
     pub name: String,
-    pub description: String
+    pub description: String,
 }
 
 impl TaskConfig {
@@ -99,14 +102,16 @@ impl TaskConfig {
         }
     }
 
-    pub fn new<T>(is_available: bool) -> TaskConfig where T: Task + Typed {
+    pub fn new<T>(is_available: bool) -> TaskConfig
+    where
+        T: Task + Typed,
+    {
         let docs = T::DOCS;
         let mut parameters = Vec::<Parameter>::new();
-        
+
         if let TypeInfo::Struct(struct_info) = T::type_info() {
             for name in struct_info.field_names() {
-              
-                /* 
+                /*
                 let description = docs.field_comments.get(name.to_owned());
                 let mut _description = "".to_string();
                 if let Some(description) = description {
@@ -114,7 +119,10 @@ impl TaskConfig {
                 }
                 */
 
-                parameters.push(Parameter { name: name.to_string(), description: "".to_string() });
+                parameters.push(Parameter {
+                    name: name.to_string(),
+                    description: "".to_string(),
+                });
             }
         }
 
@@ -126,17 +134,21 @@ impl TaskConfig {
                 //UserEventType::from::<T>(args)
                 create_task::<T>(args)
             }),
-            is_available
+            is_available,
         }
     }
 }
 
-
-fn create_task<T>(args: Vec<String>) -> Result<DynamicStruct> where T: Task {
+fn create_task<T>(args: Vec<String>) -> Result<DynamicStruct>
+where
+    T: Task,
+{
     if let TypeInfo::Struct(struct_info) = T::type_info() {
         let mut data = DynamicStruct::default();
         for i in 0..args.len() {
-            let field = struct_info.field_at(i).expect("Failed to find field at index");
+            let field = struct_info
+                .field_at(i)
+                .expect("Failed to find field at index");
             data.insert(field.name(), args[i].clone());
         }
         data.set_represented_type(Some(T::type_info()));
@@ -154,12 +166,15 @@ fn create_task<T>(args: Vec<String>) -> Result<DynamicStruct> where T: Task {
 //    }
 //}
 
-pub fn get_event_name_from_type<T>() -> String where T: Task {
+pub fn get_event_name_from_type<T>() -> String
+where
+    T: Task,
+{
     let type_name = T::type_info().type_path();
     get_event_name_from_type_name(type_name)
 }
 
-/* 
+/*
 pub fn get_event_name(event_type: UserEventType) -> String {
     if let ReflectRef::Enum(enum_ref) = event_type.as_reflect().reflect_ref() {
         let s = enum_ref.field_at(0).unwrap();
@@ -170,7 +185,7 @@ pub fn get_event_name(event_type: UserEventType) -> String {
 }*/
 
 pub fn get_event_name_from_type_name(type_name: &str) -> String {
-    let mut name = type_name.to_string();//.to_lowercase();
+    let mut name = type_name.to_string(); //.to_lowercase();
     if let Some(index) = name.rfind("::") {
         name = name.as_str()[index + 2..].to_string(); // +2 to skip the "::"
     }
@@ -192,7 +207,7 @@ fn camel_to_snake(s: &str) -> String {
 #[derive(Task, Default, Event, Reflect, Debug, Clone, Serialize, Deserialize, Documented)]
 /// Speaks text using the provided voice name and emotion
 pub struct SpeakEventArgs {
-    pub text: String
+    pub text: String,
 }
 
 #[derive(Task, Default, Event, Reflect, Debug, Clone, Serialize, Deserialize, Documented)]
@@ -200,7 +215,7 @@ pub struct SpeakEventArgs {
 pub struct VoiceEventArgs {
     pub voice_name: String,
     pub emotion: String,
-    pub text: String
+    pub text: String,
 }
 
 /*

@@ -3,8 +3,7 @@ use std::sync::LazyLock;
 
 // Capture the prefix instead of using lookahead: these patterns need no
 // backtracking engine. Reuse them across streamed chunks and agent instances.
-pub(super) static COMMAND_NAME: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(.*?)\(").unwrap());
+pub(super) static COMMAND_NAME: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(.*?)\(").unwrap());
 pub(super) static SENTENCE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r".*?(?:\n|\r|\.|\?|!)").unwrap());
 

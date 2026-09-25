@@ -17,6 +17,19 @@ pub mod web_speech_transcriber;
 #[cfg(target_arch = "wasm32")]
 pub use web_speech_transcriber::*;
 
+#[cfg(all(
+    feature = "sherpa",
+    not(target_arch = "wasm32"),
+    not(target_arch = "xtensa")
+))]
+pub mod sherpa_transcriber;
+#[cfg(all(
+    feature = "sherpa",
+    not(target_arch = "wasm32"),
+    not(target_arch = "xtensa")
+))]
+pub use sherpa_transcriber::*;
+
 use bytes::Bytes;
 use crossbeam::channel::RecvError;
 use std::error::Error;

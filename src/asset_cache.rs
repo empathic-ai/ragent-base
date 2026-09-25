@@ -2,25 +2,25 @@ use std::collections::HashMap;
 use std::future::Future;
 //use bytes::Bytes;
 //use async_channel;
-use tokio::sync::Mutex;
-use std::sync::Arc;
+use anyhow::Context;
 use anyhow::Result;
 use anyhow::anyhow;
-use anyhow::Context;
 use async_channel::Receiver;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 // This type represents the asset you are loading.
 #[derive(Clone)]
 pub struct Asset {
     pub metadata: HashMap<String, String>,
-    pub bytes: Vec<u8>
+    pub bytes: Vec<u8>,
 } // or whatever your asset type is
 
 impl Asset {
     pub fn new(bytes: Vec<u8>) -> Asset {
         Asset {
             metadata: Default::default(),
-            bytes: bytes
+            bytes: bytes,
         }
     }
 }
@@ -55,23 +55,34 @@ impl AssetCache {
                 let asset = receiver.recv().await?;
                 Ok(asset)
             }
-            None => {
-                Err(anyhow!("Tried to get an asset that isn't loaded or loading!"))
-            }
+            None => Err(anyhow!(
+                "Tried to get an asset that isn't loaded or loading!"
+            )),
         }
     }
-    
-    pub async fn load_asset(&mut self, asset_id: String, load_func: impl Future<Output = Result<Asset>> + Send + 'static, wait_for_completion: bool) -> Result<()> {
+
+    pub async fn load_asset(
+        &mut self,
+        asset_id: String,
+        load_func: impl Future<Output = Result<Asset>> + Send + 'static,
+        wait_for_completion: bool,
+    ) -> Result<()> {
         // Your asset loading logic here
         //let mut assets = self.assets.lock().await;
         let (tx, rx) = async_channel::bounded::<Asset>(1);
 
-        self.assets.lock().await.insert(asset_id.clone(), AssetState::Loading(rx));
+        self.assets
+            .lock()
+            .await
+            .insert(asset_id.clone(), AssetState::Loading(rx));
         let _assets = self.assets.clone();
         let load_func = async move {
             let asset = load_func.await.expect("Function failed to load asset");
-            _assets.lock().await.insert(asset_id.clone(), AssetState::Loaded(asset.clone()));
-            tx.send(asset).await;//.expect("Failed to send loaded asset!");
+            _assets
+                .lock()
+                .await
+                .insert(asset_id.clone(), AssetState::Loaded(asset.clone()));
+            tx.send(asset).await; //.expect("Failed to send loaded asset!");
             tx.close();
         };
         if wait_for_completion {
@@ -82,7 +93,7 @@ impl AssetCache {
         Ok(())
     }
 
-    /* 
+    /*
     pub async fn get_or_load(&self, key: Uuid) -> Result<Asset> {
         let mut assets = self.assets.lock().await;
 
@@ -119,7 +130,7 @@ impl AssetCache {
     */
 }
 
-/* 
+/*
 #[tokio::main]
 async fn main() {
     let cache = Arc::new(AssetCache::new());

@@ -27,6 +27,19 @@ pub mod candle_chat_completer;
 #[cfg(feature = "candle")]
 pub use candle_chat_completer::*;
 
+#[cfg(all(
+    feature = "llama-cpp",
+    not(target_arch = "wasm32"),
+    not(target_arch = "xtensa")
+))]
+pub mod llama_cpp_chat_completer;
+#[cfg(all(
+    feature = "llama-cpp",
+    not(target_arch = "wasm32"),
+    not(target_arch = "xtensa")
+))]
+pub use llama_cpp_chat_completer::*;
+
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 

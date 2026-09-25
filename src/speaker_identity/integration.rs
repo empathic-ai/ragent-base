@@ -62,8 +62,13 @@ impl TranscriberWorker {
         output_tx: tokio::sync::broadcast::Sender<UserEvent>,
     ) -> Result<(Self, SpeakerPipeline)> {
         Self::new_with_speakers_and_usage(
-            space_id, transcriber, options, output_tx, UsageReporter::disabled(),
-        ).await
+            space_id,
+            transcriber,
+            options,
+            output_tx,
+            UsageReporter::disabled(),
+        )
+        .await
     }
 
     pub async fn new_with_speakers_and_usage(
@@ -141,13 +146,20 @@ impl TranscriberWorker {
                         continue;
                     }
                 };
-                let usage = text_usage.read().expect("speaker usage lock poisoned").clone();
+                let usage = text_usage
+                    .read()
+                    .expect("speaker usage lock poisoned")
+                    .clone();
                 if !usage.is_available() {
                     continue;
                 }
                 usage.report(
                     "deepgram",
-                    response.estimated_cost.to_string().parse().unwrap_or_default(),
+                    response
+                        .estimated_cost
+                        .to_string()
+                        .parse()
+                        .unwrap_or_default(),
                     response.usage_quantity,
                     response.usage_unit.clone(),
                 );
@@ -300,9 +312,8 @@ impl SpaceWorker {
         transcriber: Box<dyn Transcriber>,
         options: SpeakerOptions,
     ) -> Result<Self> {
-        Self::new_with_speakers_and_usage(
-            space_id, transcriber, options, UsageReporter::disabled(),
-        ).await
+        Self::new_with_speakers_and_usage(space_id, transcriber, options, UsageReporter::disabled())
+            .await
     }
 
     pub async fn new_with_speakers_and_usage(
@@ -312,9 +323,14 @@ impl SpaceWorker {
         usage: UsageReporter,
     ) -> Result<Self> {
         let (output_tx, output_rx) = tokio::sync::broadcast::channel(64);
-        let (space_transcriber, speaker_pipeline) =
-            TranscriberWorker::new_with_speakers_and_usage(space_id, transcriber, options, output_tx.clone(), usage.clone())
-                .await?;
+        let (space_transcriber, speaker_pipeline) = TranscriberWorker::new_with_speakers_and_usage(
+            space_id,
+            transcriber,
+            options,
+            output_tx.clone(),
+            usage.clone(),
+        )
+        .await?;
         Ok(Self {
             state: Arc::new(futures_util::lock::Mutex::new(SpaceState {
                 space_id,

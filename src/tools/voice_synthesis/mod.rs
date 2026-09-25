@@ -18,6 +18,13 @@ pub mod play_ht_synthesizer;
 #[cfg(feature = "candle")]
 pub mod candle_synthesizer;
 
+#[cfg(all(
+    feature = "sherpa",
+    not(target_arch = "wasm32"),
+    not(target_arch = "xtensa")
+))]
+pub mod sherpa_synthesizer;
+
 pub mod coqui_synthesizer;
 
 use async_trait::async_trait;
@@ -51,5 +58,11 @@ pub mod prelude {
     pub use super::openai_synthesizer::*;
     #[cfg(not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android")))]
     pub use super::play_ht_synthesizer::*;
+    #[cfg(all(
+        feature = "sherpa",
+        not(target_arch = "wasm32"),
+        not(target_arch = "xtensa")
+    ))]
+    pub use super::sherpa_synthesizer::*;
     pub use super::*;
 }

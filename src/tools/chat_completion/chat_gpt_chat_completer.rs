@@ -149,7 +149,7 @@ impl ChatCompleter for ChatGPTChatCompleter {
         }
 
         let chat_completion_request = ChatCompletionStreamRequest::new(model.to_string(), messages)
-        .reasoning_effort(ReasoningEffort::None)
+            .reasoning_effort(ReasoningEffort::None)
             .stream_options(StreamOptions {
                 include_usage: true,
             });

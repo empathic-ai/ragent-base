@@ -1,7 +1,7 @@
-use bytes::Bytes;
 use async_trait::async_trait;
-use tokio::sync::broadcast::{self, channel, Sender, Receiver};
+use bytes::Bytes;
 use dyn_clone::DynClone;
+use tokio::sync::broadcast::{self, Receiver, Sender, channel};
 
 #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 #[cfg(feature = "openai")]
@@ -12,9 +12,9 @@ pub use chatgpt_realtime::*;
 
 #[derive(Clone)]
 pub enum RealtimeEvent {
-	Text(String),
-	Audio(Vec<i16>),
-	AudioEnd
+    Text(String),
+    Audio(Vec<i16>),
+    AudioEnd,
 }
 
 #[async_trait]
@@ -25,5 +25,5 @@ pub trait Realtime: Send + Sync + DynClone {
     /// Receives a `RealtimeEvent` from the chat.
     async fn recv(&mut self) -> RealtimeEvent;
 
-	fn get_receiver(&self) -> Receiver<RealtimeEvent>;
+    fn get_receiver(&self) -> Receiver<RealtimeEvent>;
 }

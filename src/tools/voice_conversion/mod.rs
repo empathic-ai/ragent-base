@@ -13,8 +13,12 @@ pub use eleven_labs_converter::*;
 
 #[async_trait]
 pub trait VoiceConverter: Send + Sync {
-    async fn convert_voice(&self, voice_name: String, bytes: Vec<u8>) -> Result<VoiceConversionResult>;
+    async fn convert_voice(
+        &self,
+        voice_name: String,
+        bytes: Vec<u8>,
+    ) -> Result<VoiceConversionResult>;
 }
 pub struct VoiceConversionResult {
-    pub bytes: Vec<u8>
+    pub bytes: Vec<u8>,
 }

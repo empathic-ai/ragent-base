@@ -26,11 +26,11 @@ lazy_static! {
         map.insert("child-b".to_string(), "Z8aiHDBl5U16BuihS7ss".to_string());
         // Bearsworth voice
         map.insert("silly-man".to_string(), "542jzeOaLKbcpZhWfJDa".to_string());
-		map.insert("anna".to_string(), "q6bboItSc3laqmM0fge1".to_string());
+        map.insert("anna".to_string(), "q6bboItSc3laqmM0fge1".to_string());
         map.insert("pocket".to_string(), "kYFDuQbutb5RHLz9I0m7".to_string());
         map.insert("vindicta".to_string(), "MOndOnIV7fyG5Q1V5U9s".to_string());
         map.insert("jessi".to_string(), "09AoN6tYyW3VSTQqCo7C".to_string());
-        
+
         // Old anatra voice
         //map.insert("anatra".to_string(), "F9UvutjrG9l2yvDB2zSt".to_string());
         map

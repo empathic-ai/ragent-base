@@ -3,12 +3,12 @@ use std::path::PathBuf;
 #[cfg(feature = "bevy")]
 use bevy::prelude::*;
 #[cfg(feature = "bevy_reflect")]
-use bevy_reflect::{prelude::*, DynamicStruct};
+use bevy_reflect::{DynamicStruct, prelude::*};
+use flux::prelude::*;
 #[cfg(feature = "serde")]
-use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::DeserializeOwned};
 #[cfg(feature = "serde")]
 use serde_with::serde_as;
-use flux::prelude::*;
 use smart_clone::SmartClone;
 
 /// This is a placeholder comment.
@@ -87,12 +87,22 @@ pub fn get_sing_event_prompt(agent_id: &Id) -> String {
         .flatten()
         .filter_map(|entry| entry.ok())
         .filter(|e| e.path().is_file())
-        .filter(|e| e.path().extension().is_some_and(|extension| extension == "wav"))
-        .filter_map(|e| e.path().file_stem().and_then(|name| name.to_str()).map(String::from))
+        .filter(|e| {
+            e.path()
+                .extension()
+                .is_some_and(|extension| extension == "wav")
+        })
+        .filter_map(|e| {
+            e.path()
+                .file_stem()
+                .and_then(|name| name.to_str())
+                .map(String::from)
+        })
         .collect();
     song_names.sort_unstable();
 
-    let song_names: String = song_names.iter()
+    let song_names: String = song_names
+        .iter()
         .map(|s| format!(r#""{}""#, s))
         .collect::<Vec<_>>()
         .join(", ");

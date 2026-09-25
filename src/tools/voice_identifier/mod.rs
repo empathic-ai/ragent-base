@@ -10,10 +10,11 @@ use async_trait::async_trait;
 #[async_trait]
 pub trait VoiceIdentifier: Send + Sync {
     async fn create_voice_profile(&self, voice_name: &str) -> Result<()>;
-    async fn identify_voice(&self, voice_names: Vec<String>) -> Result<VoiceIdentificationResponse>;
+    async fn identify_voice(&self, voice_names: Vec<String>)
+    -> Result<VoiceIdentificationResponse>;
 }
 
 #[derive(Clone)]
 pub struct VoiceIdentificationResponse {
-    pub voice_name: String
+    pub voice_name: String,
 }

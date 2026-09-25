@@ -72,7 +72,10 @@ pub struct TranscriberWorker {
     audio_input: Option<AudioInput>,
     audio_input_task: Option<JoinHandle<()>>,
     worker_tasks: Vec<JoinHandle<()>>,
-    #[cfg(all(feature = "speaker-identification", not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android"))))]
+    #[cfg(all(
+        feature = "speaker-identification",
+        not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android"))
+    ))]
     speaker_usage: Option<Arc<std::sync::RwLock<UsageReporter>>>,
     /// Opt-in bounded diagnostic history; snapshots do not consume STT audio.
     pub audio_history: Option<delune::Replay>,
@@ -86,10 +89,30 @@ const TRANSCRIBER_QUEUE_CHUNKS: usize = 64;
 const CONVERSATION_START_PROMPT: &str = "A user has just connected to you. Start the conversation with a brief, warm greeting and an inviting question.";
 
 impl TranscriberWorker {
-    #[cfg(all(feature = "speaker-identification", not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android"))))]
-    pub(crate) fn from_speaker_parts(token: CancellationToken, input_tx: tokio::sync::broadcast::Sender<Bytes>, worker_tasks: Vec<JoinHandle<()>>, speaker_usage: Arc<std::sync::RwLock<UsageReporter>>) -> Self {
-        let usage = speaker_usage.read().expect("speaker usage lock poisoned").clone();
-        Self { token, input_tx, worker_tasks, usage, speaker_usage: Some(speaker_usage), audio_input: None, audio_input_task: None, audio_history: None }
+    #[cfg(all(
+        feature = "speaker-identification",
+        not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android"))
+    ))]
+    pub(crate) fn from_speaker_parts(
+        token: CancellationToken,
+        input_tx: tokio::sync::broadcast::Sender<Bytes>,
+        worker_tasks: Vec<JoinHandle<()>>,
+        speaker_usage: Arc<std::sync::RwLock<UsageReporter>>,
+    ) -> Self {
+        let usage = speaker_usage
+            .read()
+            .expect("speaker usage lock poisoned")
+            .clone();
+        Self {
+            token,
+            input_tx,
+            worker_tasks,
+            usage,
+            speaker_usage: Some(speaker_usage),
+            audio_input: None,
+            audio_input_task: None,
+            audio_history: None,
+        }
     }
     pub async fn new(
         space_id: Id,
@@ -155,7 +178,9 @@ impl TranscriberWorker {
                         if !ev.transcript.trim_start().trim_end().is_empty() {
                             //println!("Sending transcription result to agent!");
 
-                            let speaker = ev.diarization_label.clone()
+                            let speaker = ev
+                                .diarization_label
+                                .clone()
                                 .or_else(|| ev.speaker.map(|speaker| speaker.to_string()))
                                 .unwrap_or_else(|| "Unknown".to_string());
 
@@ -193,7 +218,10 @@ impl TranscriberWorker {
             audio_input: None,
             audio_input_task: None,
             worker_tasks: Vec::new(),
-            #[cfg(all(feature = "speaker-identification", not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android"))))]
+            #[cfg(all(
+                feature = "speaker-identification",
+                not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android"))
+            ))]
             speaker_usage: None,
             audio_history: None,
             //output_rx: output_rx
@@ -261,7 +289,10 @@ impl TranscriberWorker {
 
     pub fn set_usage(&mut self, usage: UsageReporter) {
         let changed = !self.usage.same_budget(&usage);
-        #[cfg(all(feature = "speaker-identification", not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android"))))]
+        #[cfg(all(
+            feature = "speaker-identification",
+            not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android"))
+        ))]
         if let Some(shared) = &self.speaker_usage {
             *shared.write().expect("speaker usage lock poisoned") = usage.clone();
         }
@@ -288,7 +319,9 @@ impl TranscriberWorker {
 impl Drop for TranscriberWorker {
     fn drop(&mut self) {
         self.token.cancel();
-        for task in self.worker_tasks.drain(..) { task.abort(); }
+        for task in self.worker_tasks.drain(..) {
+            task.abort();
+        }
         if let Some(task) = self.audio_input_task.take() {
             task.abort();
         }
@@ -726,7 +759,10 @@ impl SpaceWorker {
 }
 
 pub struct SpaceState {
-    #[cfg(all(feature = "speaker-identification", not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android"))))]
+    #[cfg(all(
+        feature = "speaker-identification",
+        not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android"))
+    ))]
     pub speaker_pipeline: Option<SpeakerPipeline>,
     pub space_id: Id,
     pub token: CancellationToken,
@@ -751,7 +787,10 @@ impl SpaceState {
         let token = CancellationToken::new();
 
         Self {
-            #[cfg(all(feature = "speaker-identification", not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android"))))]
+            #[cfg(all(
+                feature = "speaker-identification",
+                not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android"))
+            ))]
             speaker_pipeline: None,
             space_id: space_id.clone(),
             token: token,
@@ -1417,7 +1456,10 @@ impl AgentState {
             return Ok(());
         }
 
-        #[cfg(all(feature = "speaker-identification", not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android"))))]
+        #[cfg(all(
+            feature = "speaker-identification",
+            not(any(target_arch = "wasm32", target_arch = "xtensa", target_os = "android"))
+        ))]
         if let Some(ev) = SpeakerResolvedEvent::from_dynamic(&user_ev.ev) {
             // Append a fresh annotation; do not rewrite old messages or trigger
             // another LLM reply merely because recognition finished later.

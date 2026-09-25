@@ -1,8 +1,8 @@
-use std::{str::FromStr, collections::HashMap};
+use std::{collections::HashMap, str::FromStr};
 
+use crate::prelude::*;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
-use crate::prelude::*;
 
 #[derive(Default, Clone)]
 pub struct AgentConfig {
@@ -12,23 +12,29 @@ pub struct AgentConfig {
     pub description: String,
     pub voice_id: String,
     //pub font: String,
-    pub task_configs_by_name: HashMap<String, TaskConfig>
+    pub task_configs_by_name: HashMap<String, TaskConfig>,
 }
 
 impl AgentConfig {
-    pub fn new(name: String, description: String, voice_id: String, task_configs: Vec<TaskConfig>) -> AgentConfig {
+    pub fn new(
+        name: String,
+        description: String,
+        voice_id: String,
+        task_configs: Vec<TaskConfig>,
+    ) -> AgentConfig {
         AgentConfig {
             name: name,
             description: description,
             voice_id: voice_id,
-            task_configs_by_name: Self::convert_to_hashmap(task_configs)
+            task_configs_by_name: Self::convert_to_hashmap(task_configs),
         }
     }
 
     fn convert_to_hashmap(task_configs: Vec<TaskConfig>) -> HashMap<String, TaskConfig> {
-        task_configs.into_iter().map(|task_config| {
-            (task_config.name.clone(), task_config)
-        }).collect()
+        task_configs
+            .into_iter()
+            .map(|task_config| (task_config.name.clone(), task_config))
+            .collect()
     }
 }
 
