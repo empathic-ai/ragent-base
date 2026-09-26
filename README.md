@@ -41,6 +41,20 @@ Preset speakers use `SherpaVoiceConfig::Preset`; Pocket/ZipVoice-style cloning
 uses `SherpaVoiceConfig::Cloned` with reference PCM and optional transcript.
 Local synthesis and completion report zero external cost.
 
+`Synthesizer::create_speech_stream` optionally returns a `SynthesisStream`:
+explicit PCM16 audio format, bounded sample chunks, and a separate completion
+result carrying usage (with empty bytes for Sherpa). `None` selects the existing
+whole-result path. Consume chunks before awaiting completion; dropping the chunk
+receiver unblocks the producer and requests termination at its next callback.
+Pocket callbacks deliver incremental audio, not cumulative prefixes. Native
+latent generation precedes callbacks, so cancellation is not instantaneous.
+AgentWorker serializes streamed and cached speech through its voice queue and
+rejects mismatched speaker formats rather than playing at an incorrect rate.
+Streaming currently uses fixed 4x gain with peak clipping; listening tests are
+still needed to assess loudness and distortion. It does not use whole-utterance
+RMS normalization. The `Local TTS first PCM chunk` log measures time to the first
+native callback, not time to audible playback on the device.
+
 The llama backend keeps the GGUF model loaded, applies the model's embedded chat
 template, and streams token deltas through `ChatCompletionResponse`. Its context
 and native generation state are confined to a blocking worker because

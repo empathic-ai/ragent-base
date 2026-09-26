@@ -20,7 +20,7 @@ use time::{Instant, SystemTime};
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
-use super::text_patterns::{COMMAND_NAME, SENTENCE};
+use super::text_patterns::COMMAND_NAME;
 use anyhow::{Context, Result, anyhow, ensure};
 use async_compat::{Compat, CompatExt};
 #[cfg(feature = "bevy")]
@@ -41,6 +41,11 @@ use substring::Substring;
 pub struct AgentWorker {
     pub user_id: Id,
     pub state: Arc<Mutex<AgentState>>,
+}
+
+enum VoicePlayback {
+    Cached(UserEvent),
+    Stream(UserEvent, SynthesisStream, tokio::sync::oneshot::Sender<()>),
 }
 
 /// A task call emitted by an isolated agent completion.
@@ -365,6 +370,8 @@ impl ChatCompletionResponseWorker {
     pub async fn run(&mut self) -> Result<()> {
         let task_configs = self.config.task_configs_by_name.values().cloned().collect();
 
+        info!(space = %self.space_id, "Chat completion started");
+
         let mut stream = self
             .chat_completer
             .get_response(self.messages.clone(), task_configs)
@@ -372,12 +379,14 @@ impl ChatCompletionResponseWorker {
 
         let mut text_tasks = "".to_string();
         let mut full_response = "".to_string();
+        let mut chunk_count = 0usize;
 
         tracing::debug!("Receiving chat response stream");
 
         while let Some(result) = stream.next().await {
             match result {
                 Ok(x) => {
+                    chunk_count += 1;
                     self.usage.report(
                         "openai",
                         x.estimated_cost.to_string().parse().unwrap_or_default(),
@@ -434,6 +443,14 @@ impl ChatCompletionResponseWorker {
             remaining_bytes = text_tasks.len(),
             "Chat response stream completed"
         );
+        info!(
+            space = %self.space_id,
+            chunks = chunk_count,
+            characters = full_response.chars().count(),
+            empty = full_response.trim().is_empty(),
+            contains_speak_task = full_response.contains("speak("),
+            "Chat completion finished"
+        );
 
         _ = self.output_tasks(text_tasks, true).await;
 
@@ -445,6 +462,37 @@ impl ChatCompletionResponseWorker {
             return Ok("".to_string());
         }
 
+        let command_candidate = {
+            let text = temp_commands.trim_start();
+            if let Some((name, _)) = text.split_once('(') {
+                self.config
+                    .task_configs_by_name
+                    .contains_key(name.trim())
+            } else {
+                !is_end
+                    && self
+                        .config
+                        .task_configs_by_name
+                        .keys()
+                        .any(|name| name.starts_with(text))
+            }
+        };
+
+        if !command_candidate {
+            let (sentences, tail) =
+                super::text_patterns::split_speech(&temp_commands, is_end);
+            for sentence in sentences {
+                if super::text_patterns::is_speakable_sentence(sentence) {
+                    self.call_function(
+                        get_event_name_from_type::<SpeakEvent>(),
+                        vec![sentence.to_owned()],
+                    )?;
+                }
+            }
+            return Ok(tail.to_owned());
+        }
+
+        let original_text = temp_commands.clone();
         let mut temp_commands = temp_commands;
 
         if is_end {
@@ -454,6 +502,28 @@ impl ChatCompletionResponseWorker {
         //println!("Parsing tasks from response: '{}'.", temp_commands);
 
         let (text_tasks, mut dangling_text_task) = get_commands(&temp_commands);
+
+        let contains_command = text_tasks.iter().any(|task| {
+            COMMAND_NAME
+                .captures(task)
+                .and_then(|captures| captures.get(1))
+                .is_some_and(|name| {
+                    self.config
+                        .task_configs_by_name
+                        .contains_key(name.as_str().trim())
+                })
+        });
+        if is_end && !contains_command {
+            let speech_text = original_text.trim();
+            if !speech_text.is_empty() {
+                info!(characters = speech_text.chars().count(), "Using unwrapped chat response as speech");
+                self.call_function(
+                    get_event_name_from_type::<SpeakEvent>(),
+                    vec![speech_text.to_owned()],
+                )?;
+                return Ok(String::new());
+            }
+        }
 
         for text_task in text_tasks {
             let r = &*COMMAND_NAME;
@@ -482,7 +552,7 @@ impl ChatCompletionResponseWorker {
                     //}
                     //println!("Created new user task named '{}' with args '{}'.", command_name, args);
                 } else {
-                    self.process_speech(task_name, args)?;
+                    self.process_speech(task_name, args, true)?;
                 }
             } else {
                 //println!("Failed to create command from dangling text: '{}'.", command.clone());
@@ -492,27 +562,9 @@ impl ChatCompletionResponseWorker {
         //println!("Dangling text tasks: {}", dangling_text_task);
 
         let r = &*COMMAND_NAME;
-        let mut t = dangling_text_task.clone();
-        let mut _t = dangling_text_task.clone();
-        let mut dangling_task_name = r.captures(&_t);
+        let dangling_task_name = r.captures(&dangling_text_task);
 
         // If there is a space later on in the string, process it as a speech command
-        if dangling_task_name.is_none()
-            && dangling_text_task
-                .trim_start_matches("\n")
-                .trim_start()
-                .contains(' ')
-        {
-            //dangling_text_task = r#"speak("default", "default", "#.to_string() + &dangling_text_task;
-            dangling_text_task = r#"speak(""#.to_string()
-                + &dangling_text_task
-                    .trim_start_matches("\n")
-                    .trim_start()
-                    .trim_start_matches("\"");
-            t = dangling_text_task.clone();
-            dangling_task_name = r.captures(&t);
-        }
-
         if let Some(dangling_task_name) = dangling_task_name {
             let dangling_task_name = dangling_task_name[1].to_string();
 
@@ -533,11 +585,13 @@ impl ChatCompletionResponseWorker {
                 if dangling_task_name == get_event_name_from_type::<VoiceEventArgs>()
                     && (args.len() > 2 && args[2] != "\"" && args[2] != "\'")
                 {
-                    dangling_text_task = self.process_speech(dangling_task_name, args.clone())?;
+                    dangling_text_task =
+                        self.process_speech(dangling_task_name, args.clone(), is_end)?;
                 } else if dangling_task_name == get_event_name_from_type::<SpeakEvent>()
                     && (args.len() > 0 && args[0] != "\"" && args[0] != "\'")
                 {
-                    dangling_text_task = self.process_speech(dangling_task_name, args.clone())?;
+                    dangling_text_task =
+                        self.process_speech(dangling_task_name, args.clone(), is_end)?;
                 }
             }
         }
@@ -587,30 +641,23 @@ impl ChatCompletionResponseWorker {
         }
     }
 
-    fn process_speech(&mut self, ev_name: String, mut args: Vec<String>) -> Result<String> {
+    fn process_speech(
+        &mut self,
+        ev_name: String,
+        mut args: Vec<String>,
+        command_is_complete: bool,
+    ) -> Result<String> {
         //println!("Processing speech: {}", args.join(", "));
 
         let length = args.len();
-        let re = &*SENTENCE;
-
         let speech_text = args[length - 1].clone();
-        let captures = re.find_iter(&speech_text);
+        let (sentences, dangling_speech_text) =
+            super::text_patterns::split_speech(&speech_text, command_is_complete);
 
-        let mut processed_speech: String = "".to_string();
-        for sentence in captures {
-            let speech_text = sentence.as_str().to_string();
+        for sentence in sentences {
+            let speech_text = sentence.to_owned();
 
-            if !speech_text
-                .trim_matches('.')
-                .trim_matches(',')
-                .trim_matches('!')
-                .trim_matches('?')
-                .is_empty()
-                && speech_text != "\""
-                && speech_text != "\""
-            {
-                processed_speech += &speech_text;
-
+            if super::text_patterns::is_speakable_sentence(&speech_text) && speech_text != "\"" {
                 let mut _args = args.clone();
                 _args[length - 1] = speech_text.clone();
 
@@ -618,9 +665,7 @@ impl ChatCompletionResponseWorker {
             }
         }
 
-        let dangling_speech_text = speech_text.substring(processed_speech.len(), speech_text.len());
-
-        args[length - 1] = dangling_speech_text.to_string();
+        args[length - 1] = dangling_speech_text.to_owned();
 
         let mut speech = ev_name.clone() + "(";
         for i in (0..length) {
@@ -656,8 +701,15 @@ impl ChatCompletionResponseWorker {
                 }
                 '\'' => {
                     if !in_quotes {
-                        in_single_quotes = true;
-                        in_quotes = true;
+                        if current_arg
+                            .as_deref()
+                            .is_none_or(|argument| argument.trim().is_empty())
+                        {
+                            in_single_quotes = true;
+                            in_quotes = true;
+                        } else {
+                            current_arg = Some(current_arg.unwrap() + &c.to_string());
+                        }
                     } else {
                         if in_single_quotes {
                             in_quotes = false;
@@ -690,6 +742,177 @@ impl ChatCompletionResponseWorker {
         }
 
         args
+    }
+}
+
+async fn write_speaker_samples(
+    speaker_output: &mut AudioOutput,
+    mut remaining: &[i16],
+    token: &CancellationToken,
+) -> Result<()> {
+    let mut progress = Instant::now();
+    while !remaining.is_empty() && !token.is_cancelled() {
+        let count = speaker_output.write(remaining);
+        if count > 0 {
+            remaining = &remaining[count..];
+            progress = Instant::now();
+        } else if progress.elapsed() >= Duration::from_secs(2) {
+            anyhow::bail!("Agent playback stalled with {} samples remaining", remaining.len());
+        } else {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures_util::{Stream, stream};
+    use std::pin::Pin;
+
+    #[tokio::test]
+    async fn speaker_preserves_utterances_larger_than_buffer() {
+        let (input, mut output) = AudioOutput::new_with_input(8, AudioFormat::new(1000, 1, 16));
+        let samples: Vec<i16> = (0..64).collect();
+        let token = CancellationToken::new();
+        let mut source = input.into_source(Duration::from_millis(1));
+        let playback = write_speaker_samples(&mut output, &samples, &token);
+        let drain = async {
+            let mut received = Vec::new();
+            while received.len() < samples.len() {
+                match source.read_chunk().unwrap() {
+                    AudioRead::Ready(chunk) => received.extend_from_slice(&chunk),
+                    AudioRead::Pending => tokio::time::sleep(Duration::from_millis(1)).await,
+                    AudioRead::End => break,
+                }
+            }
+            received
+        };
+        let (result, received) = tokio::time::timeout(
+            Duration::from_secs(1),
+            futures_util::future::join(playback, drain),
+        ).await.expect("playback must yield while the buffer is full");
+        result.unwrap();
+        assert_eq!(received, samples);
+    }
+
+    #[tokio::test]
+    async fn speaker_cancellation_stops_waiting_for_full_buffer() {
+        let (_input, mut output) = AudioOutput::new_with_input(1, AudioFormat::new(1000, 1, 16));
+        output.write(&[1]);
+        let token = CancellationToken::new();
+        let cancel = async {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            token.cancel();
+        };
+        let (result, ()) = tokio::time::timeout(
+            Duration::from_secs(1),
+            futures_util::future::join(write_speaker_samples(&mut output, &[2], &token), cancel),
+        ).await.expect("cancellation must interrupt a full speaker buffer");
+        result.unwrap();
+    }
+
+    #[derive(Clone)]
+    struct EmptyChatCompleter;
+
+    #[async_trait::async_trait]
+    impl ChatCompleter for EmptyChatCompleter {
+        async fn get_response(
+            &mut self,
+            _messages: Vec<ChatCompletionMessage>,
+            _task_configs: Vec<TaskConfig>,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatCompletionResponse>> + Send>>> {
+            Ok(Box::pin(stream::empty()))
+        }
+    }
+
+    fn response_worker() -> (
+        ChatCompletionResponseWorker,
+        tokio::sync::broadcast::Receiver<UserEvent>,
+    ) {
+        let config = AgentConfig::new(
+            "test".to_owned(),
+            String::new(),
+            String::new(),
+            vec![TaskConfig::new::<SpeakEvent>(true)],
+        );
+        let (output_tx, output_rx) = tokio::sync::broadcast::channel(8);
+        (
+            ChatCompletionResponseWorker::new(
+                Id::new(),
+                Id::new(),
+                Id::new(),
+                config,
+                Vec::new(),
+                output_tx,
+                Box::new(EmptyChatCompleter),
+                UsageReporter::disabled(),
+            ),
+            output_rx,
+        )
+    }
+
+    async fn emitted_speech(
+        output_rx: &mut tokio::sync::broadcast::Receiver<UserEvent>,
+    ) -> Vec<String> {
+        let mut speech = Vec::new();
+        while let Ok(event) = output_rx.try_recv() {
+            if let Some(event) = SpeakEvent::from_reflect(&event.ev) {
+                speech.push(event.text);
+            }
+        }
+        speech
+    }
+
+    #[test]
+    fn parse_arguments_preserves_apostrophes_in_unquoted_speech() {
+        assert_eq!(
+            ChatCompletionResponseWorker::parse_arguments("HERE'S A POEM: it's lovely!"),
+            ["HERE'S A POEM: it's lovely!"]
+        );
+    }
+
+    #[test]
+    fn parse_arguments_still_supports_single_quoted_arguments() {
+        assert_eq!(
+            ChatCompletionResponseWorker::parse_arguments("'hello, world', next"),
+            ["hello, world", "next"]
+        );
+    }
+
+    #[tokio::test]
+    async fn output_tasks_streams_plain_unpunctuated_text_without_wrapper_residue() {
+        let (mut worker, mut output_rx) = response_worker();
+        let mut pending = worker.output_tasks("Hello ".to_owned(), false).await.unwrap();
+        pending = worker
+            .output_tasks(format!("{pending}world"), false)
+            .await
+            .unwrap();
+
+        assert_eq!(pending, "Hello world");
+        assert!(emitted_speech(&mut output_rx).await.is_empty());
+
+        pending = worker.output_tasks(pending, true).await.unwrap();
+        assert!(pending.is_empty());
+        assert_eq!(emitted_speech(&mut output_rx).await, ["Hello world"]);
+    }
+
+    #[tokio::test]
+    async fn output_tasks_streams_completed_plain_sentence_only_once() {
+        let (mut worker, mut output_rx) = response_worker();
+        let mut pending = worker.output_tasks("Hello ".to_owned(), false).await.unwrap();
+        pending = worker
+            .output_tasks(format!("{pending}world."), false)
+            .await
+            .unwrap();
+
+        assert!(pending.is_empty());
+        assert_eq!(emitted_speech(&mut output_rx).await, ["Hello world."]);
+
+        pending = worker.output_tasks(pending, true).await.unwrap();
+        assert!(pending.is_empty());
+        assert!(emitted_speech(&mut output_rx).await.is_empty());
     }
 }
 
@@ -854,7 +1077,7 @@ pub struct AgentState {
     // Agents not using Realtime API don't require this
     pub primary_space_id: Id,
     pub realtime_api: Option<Box<dyn Realtime>>,
-    pub synthesizer: Option<Box<dyn Synthesizer>>,
+    pub synthesizer: Option<Arc<dyn Synthesizer>>,
     pub messages: HashMap<Id, Vec<ChatCompletionMessage>>,
     pub functions: Vec<Function>,
     pub output_tx: tokio::sync::broadcast::Sender<UserEvent>,
@@ -1020,7 +1243,7 @@ impl AgentWorker {
         let (input_tx, mut input_rx) = tokio::sync::broadcast::channel::<UserEvent>(512);
         let (output_tx, mut output_rx) = tokio::sync::broadcast::channel::<UserEvent>(512);
 
-        let (voice_tx, voice_rx) = async_channel::unbounded::<UserEvent>();
+        let (voice_tx, voice_rx) = async_channel::bounded::<VoicePlayback>(1);
 
         //let _self = Arc::new(Mutex::new(self));
 
@@ -1128,10 +1351,61 @@ impl AgentWorker {
         //let _space_id = space_id.clone();
         // TODO: Rework with new Bevy implementation
         tokio::task::spawn(async move {
-            while let Ok(user_ev) = voice_rx.recv().await {
+            while let Ok(playback) = voice_rx.recv().await {
                 if _agent_token.is_cancelled() {
                     continue;
                 }
+                let user_ev = match playback {
+                    VoicePlayback::Cached(event) => event,
+                    VoicePlayback::Stream(event, mut stream, finished) => {
+                        let Some(context_id) = event.context_id.clone() else { continue; };
+                        if !_state.lock().await.is_context_running(context_id.clone()) {
+                            continue;
+                        }
+                        let speaker = _state.lock().await.speaker_output.clone();
+                        let Some(mut speaker) = speaker else { continue; };
+                        if speaker.get_format() != stream.format {
+                            tracing::warn!(?stream.format, "Streaming speech format does not match speaker");
+                            continue;
+                        }
+                        if let Some(speech) = SpeakEvent::from_reflect(&event.ev) {
+                            _state.lock().await.new_message(event.space_id.clone(), MessageRole::assistant, Content::Text(speech.text.clone()));
+                        }
+                        let mut failed = false;
+                        loop {
+                            if _agent_token.is_cancelled() || !_state.lock().await.is_context_running(context_id.clone()) {
+                                failed = true;
+                                break;
+                            }
+                            let chunk = match tokio::time::timeout(Duration::from_millis(50), stream.chunks.recv()).await {
+                                Ok(chunk) => chunk,
+                                Err(_) => continue,
+                            };
+                            let Some(chunk) = chunk else { break; };
+                            if !_state.lock().await.is_context_running(context_id.clone()) {
+                                failed = true;
+                                break;
+                            }
+                            if let Err(error) = write_speaker_samples(&mut speaker, &chunk, &_agent_token).await {
+                                tracing::warn!(%error, "Failed to queue streaming speech");
+                                failed = true;
+                                break;
+                            }
+                        }
+                        drop(stream.chunks);
+                        if !failed {
+                            match stream.completion.await {
+                                Ok(Ok(result)) => {
+                                    _state.lock().await.usage.report("local", result.cost.to_string().parse().unwrap_or_default(), result.usage_quantity, result.usage_unit);
+                                }
+                                Ok(Err(error)) => tracing::warn!(%error, "Streaming speech synthesis failed"),
+                                Err(error) => tracing::warn!(%error, "Streaming speech worker stopped"),
+                            }
+                        }
+                        let _ = finished.send(());
+                        continue;
+                    }
+                };
                 let _space_id = user_ev.space_id.clone();
                 //let token = ev.token.clone();
 
@@ -1140,12 +1414,13 @@ impl AgentWorker {
                 //}
 
                 if let Some(ev) = SpeakResultEvent::from_reflect(&user_ev.ev) {
-                    let asset = _asset_cache
-                        .lock()
-                        .await
-                        .get(ev.asset_id.clone())
-                        .await
-                        .expect("Failed to get asset");
+                    let asset = match _asset_cache.lock().await.get(ev.asset_id.clone()).await {
+                        Ok(asset) => asset,
+                        Err(error) => {
+                            tracing::error!(%error, "Failed to load synthesized speech asset");
+                            continue;
+                        }
+                    };
 
                     //if token.is_cancelled() {
                     //    continue;
@@ -1167,9 +1442,22 @@ impl AgentWorker {
                             //let file = delune::samples_to_wav(1, 24000, 16, bytes.clone());
                             //common::utils::set_bytes("test.wav", file).await;
 
-                            if let Some(speaker_output) = &mut _state.lock().await.speaker_output {
-                                speaker_output
-                                    .write(&delune::convert_16_bit_u8_to_i16(&asset.bytes));
+                            let speaker_output = _state.lock().await.speaker_output.clone();
+                            if let Some(mut speaker_output) = speaker_output {
+                                let pcm = if asset.bytes.len() >= 44
+                                    && &asset.bytes[..4] == b"RIFF"
+                                    && &asset.bytes[8..12] == b"WAVE"
+                                {
+                                    &asset.bytes[44..]
+                                } else {
+                                    &asset.bytes
+                                };
+                                let samples = delune::convert_16_bit_u8_to_i16(pcm);
+                                if let Err(error) = write_speaker_samples(
+                                    &mut speaker_output, samples, &_agent_token,
+                                ).await {
+                                    tracing::warn!(%error, "Failed to queue synthesized speech");
+                                }
                             }
 
                             /*
@@ -1226,7 +1514,7 @@ impl AgentWorker {
         mut input_rx: tokio::sync::broadcast::Receiver<UserEvent>,
         voice_id: String,
         asset_cache: Arc<Mutex<AssetCache>>,
-        voice_tx: async_channel::Sender<UserEvent>,
+        voice_tx: async_channel::Sender<VoicePlayback>,
     ) {
         let mut realtime_api_output_rx = if let Some(api) = &state.lock().await.realtime_api {
             Some(api.get_receiver())
@@ -1291,13 +1579,14 @@ impl AgentWorker {
         } else {
             #[cfg(not(feature = "server"))]
             #[cfg(feature = "game")]
-            let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
+            let default_synthesizer: Arc<dyn Synthesizer> =
+                Arc::new(ElevenLabsSynthesizer::new_from_env());
             #[cfg(not(feature = "server"))]
             #[cfg(not(feature = "game"))]
-            let synthesizer = Arc::new(CoquiSynthesizer::new());
+            let default_synthesizer: Arc<dyn Synthesizer> = Arc::new(CoquiSynthesizer::new());
             #[cfg(feature = "server")]
-            //let synthesizer = Arc::new(AzureSynthesizer::new_from_env());
-            let synthesizer = Arc::new(ElevenLabsSynthesizer::new_from_env());
+            let default_synthesizer: Arc<dyn Synthesizer> =
+                Arc::new(ElevenLabsSynthesizer::new_from_env());
 
             while let Ok(user_ev) = input_rx.recv().await {
                 let _space_id = user_ev.space_id.clone();
@@ -1335,16 +1624,41 @@ impl AgentWorker {
                             let speech_text = ev.text.clone();
                             let emotion = "default".to_string();
 
-                            debug!("Synthesizing speech: {}", speech_text.clone());
+                            info!(
+                                characters = speech_text.chars().count(),
+                                "Synthesizing speech"
+                            );
 
                             let _speech_text = speech_text.clone();
 
-                            let synthesizer = synthesizer.clone();
+                            let synthesizer = state
+                                .lock()
+                                .await
+                                .synthesizer
+                                .clone()
+                                .unwrap_or_else(|| default_synthesizer.clone());
+                            match synthesizer.create_speech_stream(emotion.clone(), voice_name.clone(), speech_text.clone()).await {
+                                Ok(Some(stream)) => {
+                                    let (finished, playback_done) = tokio::sync::oneshot::channel();
+                                    if voice_tx.send(VoicePlayback::Stream(user_ev.clone(), stream, finished)).await.is_err() {
+                                        break;
+                                    }
+                                    let _ = playback_done.await;
+                                    continue;
+                                }
+                                Ok(None) => {}
+                                Err(error) => {
+                                    tracing::warn!(%error, "Failed to start streaming synthesis");
+                                    continue;
+                                }
+                            }
                             let usage = usage.clone();
                             let load_func = async move {
                                 let result = synthesizer
                                     .create_speech(emotion, voice_name, _speech_text.clone())
                                     .await?;
+
+                                info!(bytes = result.bytes.len(), "Speech synthesis completed");
 
                                 usage.report(
                                     "elevenlabs",
@@ -1370,7 +1684,7 @@ impl AgentWorker {
                                 .expect("Asset load error");
 
                             voice_tx
-                                .send(UserEvent::new_with_context(
+                                .send(VoicePlayback::Cached(UserEvent::new_with_context(
                                     user_id.clone(),
                                     _space_id.clone(),
                                     user_ev.context_id.clone().unwrap(),
@@ -1379,7 +1693,7 @@ impl AgentWorker {
                                         text: speech_text.clone(),
                                     }
                                     .clone_dynamic(),
-                                ))
+                                )))
                                 .await;
                         } else if let Some(ev) = SingEvent::from_reflect(&user_ev.ev) {
                             let _output_tx = output_tx.clone();
@@ -1427,6 +1741,18 @@ impl AgentWorker {
 
     pub async fn stop(&self) -> Result<()> {
         self.state.lock().await.stop().await
+    }
+
+    pub async fn set_chat_completer(&self, chat_completer: Box<dyn ChatCompleter>) {
+        self.state.lock().await.chat_completer = Some(chat_completer);
+    }
+
+    pub async fn set_synthesizer(&self, synthesizer: Arc<dyn Synthesizer>) {
+        self.state.lock().await.synthesizer = Some(synthesizer);
+    }
+
+    pub async fn set_speaker_output(&self, speaker_output: AudioOutput) {
+        self.state.lock().await.speaker_output = Some(speaker_output);
     }
 }
 
@@ -1599,7 +1925,9 @@ impl AgentState {
         tokio::task::spawn(async move {
             tokio::select! {
                 r = response_worker.run() => {
-                    r.expect("Failed to get agent response");
+                    if let Err(error) = r {
+                        tracing::error!(%error, "Local chat completion failed");
+                    }
                 },
                 _ = cancel_rx.recv() => {
                     debug!("Cancelled agent repsonse!")

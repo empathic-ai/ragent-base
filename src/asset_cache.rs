@@ -77,7 +77,13 @@ impl AssetCache {
             .insert(asset_id.clone(), AssetState::Loading(rx));
         let _assets = self.assets.clone();
         let load_func = async move {
-            let asset = load_func.await.expect("Function failed to load asset");
+            let asset = match load_func.await {
+                Ok(asset) => asset,
+                Err(error) => {
+                    tracing::error!(%error, "Function failed to load asset");
+                    return;
+                }
+            };
             _assets
                 .lock()
                 .await

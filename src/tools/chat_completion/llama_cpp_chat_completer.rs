@@ -50,7 +50,8 @@ pub struct LlamaCppChatCompleter {
 
 impl LlamaCppChatCompleter {
     pub fn from_file(path: impl AsRef<std::path::Path>, config: LlamaCppConfig) -> Result<Self> {
-        let backend = LlamaBackend::init().context("initialize llama.cpp backend")?;
+        let mut backend = LlamaBackend::init().context("initialize llama.cpp backend")?;
+        backend.void_logs();
         let model = LlamaModel::load_from_file(&backend, path, &LlamaModelParams::default())
             .context("load GGUF model")?;
         Ok(Self {
@@ -112,6 +113,9 @@ fn generate(
         .model
         .str_to_token(&prompt, AddBos::Never)
         .map_err(|error| anyhow!("tokenize prompt: {error}"))?;
+    if prompt_tokens.len() >= config.context_size as usize {
+        return Err(anyhow!("local chat prompt exceeds the configured context window"));
+    }
     let context_params = llama_cpp_2::context::params::LlamaContextParams::default()
         .with_n_ctx(std::num::NonZeroU32::new(config.context_size))
         .with_n_batch(config.context_size);
@@ -133,10 +137,10 @@ fn generate(
     ]);
     let mut position = prompt_tokens.len() as i32;
     let mut generated = 0usize;
-    while generated < config.max_tokens {
+    while generated < config.max_tokens && position < config.context_size as i32 {
         let token = sampler.sample(&context, -1);
         sampler.accept(token);
-        if token == engine.model.token_eos() {
+        if engine.model.is_eog_token(token) {
             break;
         }
         let piece = String::from_utf8_lossy(
