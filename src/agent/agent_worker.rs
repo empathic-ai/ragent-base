@@ -48,6 +48,23 @@ enum VoicePlayback {
     Stream(UserEvent, SynthesisStream, tokio::sync::oneshot::Sender<()>),
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum ResponseTrigger {
+    None,
+    Immediate(Id),
+    Settled(Id),
+}
+
+fn response_trigger(space_id: Id, is_speech: bool, is_image: bool) -> ResponseTrigger {
+    if is_image {
+        ResponseTrigger::None
+    } else if is_speech {
+        ResponseTrigger::Settled(space_id)
+    } else {
+        ResponseTrigger::Immediate(space_id)
+    }
+}
+
 /// A task call emitted by an isolated agent completion.
 #[derive(Debug)]
 pub struct AgentTaskCall {
@@ -765,11 +782,89 @@ async fn write_speaker_samples(
     Ok(())
 }
 
+async fn run_speaker_output_sink(
+    mut output: AudioOutput,
+    mut receiver: tokio::sync::mpsc::Receiver<Vec<i16>>,
+    mut clear: tokio::sync::watch::Receiver<u64>,
+    token: CancellationToken,
+) {
+    loop {
+        tokio::select! {
+            _ = wait_for_cancellation(token.clone()) => break,
+            changed = clear.changed() => {
+                if changed.is_err() {
+                    break;
+                }
+                while receiver.try_recv().is_ok() {}
+            }
+            samples = receiver.recv() => {
+                let Some(samples) = samples else { break; };
+                tokio::select! {
+                    _ = wait_for_cancellation(token.clone()) => break,
+                    result = write_speaker_samples(&mut output, &samples, &token) => {
+                        if let Err(error) = result {
+                            tracing::warn!(%error, "Speaker output sink stalled; stopping sink worker");
+                            break;
+                        }
+                    }
+                    changed = clear.changed() => {
+                        if changed.is_err() {
+                            break;
+                        }
+                        while receiver.try_recv().is_ok() {}
+                    }
+                }
+            }
+        }
+    }
+}
+
+async fn wait_for_cancellation(token: CancellationToken) {
+    while !token.is_cancelled() {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+}
+
+async fn pace_speaker_dispatch(
+    sample_count: usize,
+    channels: u8,
+    sample_rate: u32,
+    deadline: &mut Instant,
+    token: &CancellationToken,
+) -> bool {
+    if channels == 0 || sample_rate == 0 {
+        return false;
+    }
+    let frames = sample_count / channels as usize;
+    *deadline += Duration::from_secs_f64(frames as f64 / sample_rate as f64);
+    tokio::select! {
+        _ = tokio::time::sleep_until((*deadline).into()) => true,
+        _ = wait_for_cancellation(token.clone()) => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use futures_util::{Stream, stream};
     use std::pin::Pin;
+
+    #[test]
+    fn only_speech_uses_settled_response_trigger() {
+        let space_id = Id::new();
+        assert_eq!(
+            response_trigger(space_id.clone(), true, false),
+            ResponseTrigger::Settled(space_id.clone())
+        );
+        assert_eq!(
+            response_trigger(space_id.clone(), false, false),
+            ResponseTrigger::Immediate(space_id.clone())
+        );
+        assert_eq!(
+            response_trigger(space_id, false, true),
+            ResponseTrigger::None
+        );
+    }
 
     #[tokio::test]
     async fn speaker_preserves_utterances_larger_than_buffer() {
@@ -811,6 +906,87 @@ mod tests {
             futures_util::future::join(write_speaker_samples(&mut output, &[2], &token), cancel),
         ).await.expect("cancellation must interrupt a full speaker buffer");
         result.unwrap();
+    }
+
+    #[tokio::test]
+    async fn speaker_sink_worker_preserves_chunk_order() {
+        let (input, output) = AudioOutput::new_with_input(16, AudioFormat::new(16_000, 1, 16));
+        let (sender, receiver) = tokio::sync::mpsc::channel(4);
+        let (clear, clear_receiver) = tokio::sync::watch::channel(0);
+        let worker = tokio::spawn(run_speaker_output_sink(
+            output,
+            receiver,
+            clear_receiver,
+            CancellationToken::new(),
+        ));
+        sender.send(vec![1, 2]).await.unwrap();
+        sender.send(vec![3, 4]).await.unwrap();
+        drop(sender);
+
+        let mut source = input.into_source(Duration::from_millis(1));
+        let drain = async {
+            let mut received = Vec::new();
+            while received.len() < 4 {
+                match source.read_chunk().unwrap() {
+                    AudioRead::Ready(chunk) => received.extend_from_slice(&chunk),
+                    AudioRead::Pending => tokio::time::sleep(Duration::from_millis(1)).await,
+                    AudioRead::End => break,
+                }
+            }
+            received
+        };
+        let (received, ()) = tokio::time::timeout(
+            Duration::from_secs(1),
+            futures_util::future::join(drain, async { worker.await.unwrap() }),
+        )
+        .await
+        .expect("sink worker should drain its bounded queue");
+        drop(clear);
+        assert_eq!(received, [1, 2, 3, 4]);
+    }
+
+    #[tokio::test]
+    async fn real_time_pacing_keeps_healthy_sink_from_saturating() {
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(32);
+        let token = CancellationToken::new();
+        let producer_token = token.clone();
+        let producer = async move {
+            let mut deadline = Instant::now();
+            for sequence in 0..40i16 {
+                sender.try_send(vec![sequence]).expect("healthy sink stays queued");
+                assert!(pace_speaker_dispatch(
+                    320,
+                    1,
+                    16_000,
+                    &mut deadline,
+                    &producer_token,
+                )
+                .await);
+            }
+        };
+        let consumer = async move {
+            let mut received = Vec::new();
+            let mut deadline = Instant::now();
+            while received.len() < 40 {
+                received.push(receiver.recv().await.expect("producer remains active")[0]);
+                assert!(pace_speaker_dispatch(
+                    320,
+                    1,
+                    16_000,
+                    &mut deadline,
+                    &token,
+                )
+                .await);
+            }
+            received
+        };
+        let ((), received) = tokio::time::timeout(
+            Duration::from_secs(2),
+            futures_util::future::join(producer, consumer),
+        )
+        .await
+        .expect("forty real-time chunks should not saturate the sink");
+        assert_eq!(received, (0..40i16).collect::<Vec<_>>());
     }
 
     #[derive(Clone)]
@@ -914,6 +1090,60 @@ mod tests {
         assert!(pending.is_empty());
         assert!(emitted_speech(&mut output_rx).await.is_empty());
     }
+
+    #[test]
+    fn messages_from_different_speakers_are_not_merged() {
+        let mut messages = vec![ChatCompletionMessage {
+            name: None,
+            role: MessageRole::system,
+            content: Content::Text("system".to_owned()),
+            function_call: None,
+        }];
+        append_chat_message(
+            &mut messages,
+            MessageRole::user,
+            Some("alice".to_owned()),
+            Content::Text("Where should we go?".to_owned()),
+        );
+        append_chat_message(
+            &mut messages,
+            MessageRole::user,
+            Some("bob".to_owned()),
+            Content::Text("Somewhere cheap.".to_owned()),
+        );
+
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[1].name.as_deref(), Some("alice"));
+        assert_eq!(messages[2].name.as_deref(), Some("bob"));
+    }
+
+    #[test]
+    fn superseding_a_turn_only_cancels_its_space() {
+        let space_a = Id::new();
+        let space_b = Id::new();
+        let token_a = CancellationToken::new();
+        let token_b = CancellationToken::new();
+        let mut running = HashMap::new();
+        running.insert(
+            space_a.clone(),
+            RunningContext {
+                context_id: Id::new(),
+                cancellation: token_a.clone(),
+            },
+        );
+        running.insert(
+            space_b.clone(),
+            RunningContext {
+                context_id: Id::new(),
+                cancellation: token_b.clone(),
+            },
+        );
+
+        supersede_space_turn(&mut HashMap::new(), &running, &space_b);
+
+        assert!(!token_a.is_cancelled());
+        assert!(token_b.is_cancelled());
+    }
 }
 
 // TODO: Create more dynamic use of transcribers based on requirements of users within space
@@ -974,6 +1204,32 @@ impl SpaceWorker {
 
     pub fn set_usage(&mut self, usage: UsageReporter) {
         bevy::tasks::block_on(async move { self.state.lock().await.set_usage(usage) });
+    }
+
+    pub fn set_user_audio_input(&mut self, user_id: Id, audio_input: AudioInput) {
+        bevy::tasks::block_on(async move {
+            let mut state = self.state.lock().await;
+            if !state.user_transcribers.contains_key(&user_id) {
+                let transcriber = Compat::new(TranscriberWorker::new_with_usage(
+                    state.space_id.clone(),
+                    Some(user_id.clone()),
+                    state.output_tx.clone(),
+                    state.usage.clone(),
+                ));
+                state
+                    .user_transcribers
+                    .insert(user_id.clone(), transcriber.await);
+            }
+            if let Some(transcriber) = state.user_transcribers.get_mut(&user_id) {
+                transcriber.set_audio_input(audio_input);
+            }
+        });
+    }
+
+    pub fn remove_user_audio_input(&mut self, user_id: Id) {
+        bevy::tasks::block_on(async move {
+            self.state.lock().await.user_transcribers.remove(&user_id);
+        });
     }
 
     pub fn try_recv_event(&mut self) -> Result<UserEvent> {
@@ -1071,8 +1327,18 @@ impl SpaceState {
     }
 }
 
+struct SpeakerOutputSink {
+    sender: tokio::sync::mpsc::Sender<Vec<i16>>,
+    clear: tokio::sync::watch::Sender<u64>,
+    task: JoinHandle<()>,
+    format: AudioFormat,
+}
+
+const SPEAKER_SINK_QUEUE_CHUNKS: usize = 256;
+
 pub struct AgentState {
     pub user_id: Id,
+    pub token: CancellationToken,
     // TODO: Remove this property and enable multiple spaces using Realtime API
     // Agents not using Realtime API don't require this
     pub primary_space_id: Id,
@@ -1092,10 +1358,23 @@ pub struct AgentState {
     pub last_image_time: Option<Instant>,
     pub user_transcribers: HashMap<Id, SpaceWorker>,
     pub space_transcribers: HashMap<Id, SpaceWorker>,
-    pub running_contexts: HashMap<Id, tokio::sync::broadcast::Sender<()>>, //pub agent_token: CancellationToken,
-    pub speaker_output: Option<AudioOutput>,
+    pub running_contexts: HashMap<Id, RunningContext>,
+    pub speaker_outputs: HashMap<Id, HashMap<Id, AudioOutput>>,
+    pub speaker_output_inputs: HashMap<Id, HashMap<Id, AudioInput>>,
+    speaker_sinks: HashMap<Id, HashMap<Id, SpeakerOutputSink>>,
+    pub pending_turns: HashMap<Id, PendingTurn>,
     pub mic_input: Option<AudioInput>,
     pub usage: UsageReporter,
+}
+
+struct RunningContext {
+    context_id: Id,
+    cancellation: CancellationToken,
+}
+
+struct PendingTurn {
+    turn_id: Id,
+    cancellation: CancellationToken,
 }
 
 impl AgentWorker {
@@ -1285,6 +1564,7 @@ impl AgentWorker {
         let asset_cache = Arc::new(Mutex::new(AssetCache::new()));
         let state = Arc::new(Mutex::new(AgentState {
             user_id: user_id.clone(),
+            token: agent_token.clone(),
             user_transcribers: Default::default(),
             synthesizer: None,
             space_transcribers: Default::default(),
@@ -1301,6 +1581,10 @@ impl AgentWorker {
             current_emotion: "default".to_string(),
             last_image_time: None,
             running_contexts: Default::default(),
+            speaker_outputs: Default::default(),
+            speaker_output_inputs: Default::default(),
+            speaker_sinks: Default::default(),
+            pending_turns: Default::default(),
             realtime_api: None,
             /*
             Some({
@@ -1310,7 +1594,6 @@ impl AgentWorker {
             }),
             */
             primary_space_id: primary_space_id,
-            speaker_output: None,
             mic_input: None,
             usage,
         }));
@@ -1325,12 +1608,37 @@ impl AgentWorker {
                 //    _state.lock().await.space_transcribers.get(k)
                 //    transcriber_input_tx.send(Bytes::from_iter(args.data)).unwrap();
                 //} else {
-                _state
+                    let response_trigger = _state
                     .lock()
                     .await
                     .process_input_event(ev)
                     .await
-                    .expect("Failed to get response to user event!");
+                        .expect("Failed to process user event!");
+                    if let ResponseTrigger::Immediate(space_id) | ResponseTrigger::Settled(space_id) = response_trigger {
+                        let settled = matches!(response_trigger, ResponseTrigger::Settled(_));
+                        let (turn_id, cancellation) = {
+                            let mut state = _state.lock().await;
+                            state.schedule_response(space_id.clone())
+                        };
+                        let state = _state.clone();
+                        tokio::task::spawn(async move {
+                            if settled {
+                                tokio::select! {
+                                    _ = wait_for_cancellation(cancellation.clone()) => return,
+                                    _ = tokio::time::sleep(Duration::from_millis(350)) => {}
+                                }
+                            }
+                            let mut state = state.lock().await;
+                            if state.pending_turns.get(&space_id).is_some_and(|pending| {
+                                pending.turn_id == turn_id && !pending.cancellation.is_cancelled()
+                            }) {
+                                state.pending_turns.remove(&space_id);
+                                if let Err(error) = state.get_chat_completion_response(space_id).await {
+                                    tracing::error!(%error, "Failed to start agent response");
+                                }
+                            }
+                        });
+                    }
                 //}
             }
         });
@@ -1362,19 +1670,37 @@ impl AgentWorker {
                         if !_state.lock().await.is_context_running(context_id.clone()) {
                             continue;
                         }
-                        let speaker = _state.lock().await.speaker_output.clone();
-                        let Some(mut speaker) = speaker else { continue; };
-                        if speaker.get_format() != stream.format {
-                            tracing::warn!(?stream.format, "Streaming speech format does not match speaker");
+                        let targets = _state.lock().await.speaker_targets(&event.space_id);
+                        let mut converters: HashMap<_, _> = targets
+                            .iter()
+                            .filter(|(_, format)| format.channels > 0)
+                            .filter_map(|(output_id, format)| {
+                                delune::CaptureConverter::new(
+                                    stream.format,
+                                    format.sample_rate,
+                                    1.0,
+                                )
+                                .ok()
+                                .map(|converter| (output_id.clone(), (format.channels, converter)))
+                            })
+                            .collect();
+                        if converters.is_empty() {
+                            tracing::warn!(?stream.format, "No speaker sink can accept streaming speech");
                             continue;
                         }
+                        let context_token = {
+                            let state = _state.lock().await;
+                            state.context_token(context_id.clone())
+                        };
+                        let Some(context_token) = context_token else { continue; };
                         if let Some(speech) = SpeakEvent::from_reflect(&event.ev) {
                             _state.lock().await.new_message(event.space_id.clone(), MessageRole::assistant, Content::Text(speech.text.clone()));
                         }
-                        let mut failed = false;
+                        let mut cancelled = false;
+                        let mut dispatch_at = Instant::now();
                         loop {
-                            if _agent_token.is_cancelled() || !_state.lock().await.is_context_running(context_id.clone()) {
-                                failed = true;
+                            if context_token.is_cancelled() {
+                                cancelled = true;
                                 break;
                             }
                             let chunk = match tokio::time::timeout(Duration::from_millis(50), stream.chunks.recv()).await {
@@ -1382,18 +1708,44 @@ impl AgentWorker {
                                 Err(_) => continue,
                             };
                             let Some(chunk) = chunk else { break; };
-                            if !_state.lock().await.is_context_running(context_id.clone()) {
-                                failed = true;
+                            if context_token.is_cancelled() {
+                                cancelled = true;
                                 break;
                             }
-                            if let Err(error) = write_speaker_samples(&mut speaker, &chunk, &_agent_token).await {
-                                tracing::warn!(%error, "Failed to queue streaming speech");
-                                failed = true;
+                            for (output_id, (channels, converter)) in &mut converters {
+                                match converter.process(&chunk) {
+                                    Ok(mut converted) => {
+                                        if *channels > 1 {
+                                            converted = converted
+                                                .into_iter()
+                                                .flat_map(|sample| std::iter::repeat_n(sample, *channels as usize))
+                                                .collect();
+                                        }
+                                        _state
+                                            .lock()
+                                            .await
+                                            .enqueue_speaker_samples(&event.space_id, output_id, converted);
+                                    }
+                                    Err(error) => {
+                                        tracing::warn!(%error, %output_id, "Removing incompatible speaker sink");
+                                    }
+                                }
+                            }
+                            if !pace_speaker_dispatch(
+                                chunk.len(),
+                                stream.format.channels,
+                                stream.format.sample_rate,
+                                &mut dispatch_at,
+                                &context_token,
+                            )
+                            .await
+                            {
+                                cancelled = true;
                                 break;
                             }
                         }
                         drop(stream.chunks);
-                        if !failed {
+                        if !cancelled {
                             match stream.completion.await {
                                 Ok(Ok(result)) => {
                                     _state.lock().await.usage.report("local", result.cost.to_string().parse().unwrap_or_default(), result.usage_quantity, result.usage_unit);
@@ -1442,8 +1794,13 @@ impl AgentWorker {
                             //let file = delune::samples_to_wav(1, 24000, 16, bytes.clone());
                             //common::utils::set_bytes("test.wav", file).await;
 
-                            let speaker_output = _state.lock().await.speaker_output.clone();
-                            if let Some(mut speaker_output) = speaker_output {
+                            let targets = _state.lock().await.speaker_targets(&_space_id);
+                            if !targets.is_empty() {
+                                let context_token = {
+                                    let state = _state.lock().await;
+                                    state.context_token(user_ev.context_id.clone().unwrap())
+                                };
+                                let Some(context_token) = context_token else { continue; };
                                 let pcm = if asset.bytes.len() >= 44
                                     && &asset.bytes[..4] == b"RIFF"
                                     && &asset.bytes[8..12] == b"WAVE"
@@ -1453,10 +1810,52 @@ impl AgentWorker {
                                     &asset.bytes
                                 };
                                 let samples = delune::convert_16_bit_u8_to_i16(pcm);
-                                if let Err(error) = write_speaker_samples(
-                                    &mut speaker_output, samples, &_agent_token,
-                                ).await {
-                                    tracing::warn!(%error, "Failed to queue synthesized speech");
+                                let mut converters: Vec<_> = targets
+                                    .iter()
+                                    .filter_map(|(output_id, format)| {
+                                        delune::CaptureConverter::new(
+                                            AudioFormat::new(16_000, 1, 16),
+                                            format.sample_rate,
+                                            1.0,
+                                        )
+                                        .ok()
+                                        .map(|converter| {
+                                            (output_id.clone(), format.channels, converter)
+                                        })
+                                    })
+                                    .collect();
+                                let mut dispatch_at = Instant::now();
+                                for samples in samples.chunks(320) {
+                                    for (output_id, channels, converter) in &mut converters {
+                                        match converter.process(samples) {
+                                            Ok(mut converted) => {
+                                                if *channels > 1 {
+                                                    converted = converted
+                                                        .into_iter()
+                                                        .flat_map(|sample| std::iter::repeat_n(sample, *channels as usize))
+                                                        .collect();
+                                                }
+                                                _state
+                                                    .lock()
+                                                    .await
+                                                    .enqueue_speaker_samples(&_space_id, output_id, converted);
+                                            }
+                                            Err(error) => {
+                                                tracing::warn!(%error, %output_id, "Failed to convert synthesized speech for sink");
+                                            }
+                                        }
+                                    }
+                                    if !pace_speaker_dispatch(
+                                        samples.len(),
+                                        1,
+                                        16_000,
+                                        &mut dispatch_at,
+                                        &context_token,
+                                    )
+                                    .await
+                                    {
+                                        break;
+                                    }
                                 }
                             }
 
@@ -1752,7 +2151,99 @@ impl AgentWorker {
     }
 
     pub async fn set_speaker_output(&self, speaker_output: AudioOutput) {
-        self.state.lock().await.speaker_output = Some(speaker_output);
+        let space_id = self.state.lock().await.primary_space_id.clone();
+        self.set_speaker_output_for_space(space_id, speaker_output).await;
+    }
+
+    pub async fn set_speaker_output_for_space(&self, space_id: Id, speaker_output: AudioOutput) {
+        self.set_named_speaker_output_for_space(space_id, Id::nil(), None, speaker_output)
+            .await;
+    }
+
+    pub async fn set_named_speaker_output_for_space(
+        &self,
+        space_id: Id,
+        output_id: Id,
+        audio_input: Option<AudioInput>,
+        speaker_output: AudioOutput,
+    ) {
+        let mut state = self.state.lock().await;
+        if let Some(previous) = state
+            .speaker_sinks
+            .get_mut(&space_id)
+            .and_then(|sinks| sinks.remove(&output_id))
+        {
+            previous.task.abort();
+        }
+        let format = speaker_output.get_format();
+        let (sender, receiver) = tokio::sync::mpsc::channel(SPEAKER_SINK_QUEUE_CHUNKS);
+        let (clear, clear_receiver) = tokio::sync::watch::channel(0u64);
+        let token = state.token.clone();
+        let task = tokio::spawn(run_speaker_output_sink(
+            speaker_output.clone(),
+            receiver,
+            clear_receiver,
+            token,
+        ));
+        state
+            .speaker_outputs
+            .entry(space_id.clone())
+            .or_default()
+            .insert(output_id.clone(), speaker_output);
+        state
+            .speaker_sinks
+            .entry(space_id.clone())
+            .or_default()
+            .insert(output_id.clone(), SpeakerOutputSink { sender, clear, task, format });
+        if let Some(audio_input) = audio_input {
+            state
+                .speaker_output_inputs
+                .entry(space_id)
+                .or_default()
+                .insert(output_id, audio_input);
+        } else if let Some(inputs) = state.speaker_output_inputs.get_mut(&space_id) {
+            inputs.remove(&output_id);
+            if inputs.is_empty() {
+                state.speaker_output_inputs.remove(&space_id);
+            }
+        }
+    }
+
+    pub async fn remove_named_speaker_output_for_space(&self, space_id: Id, output_id: Id) {
+        let mut state = self.state.lock().await;
+        if let Some(sink) = state
+            .speaker_sinks
+            .get_mut(&space_id)
+            .and_then(|sinks| sinks.remove(&output_id))
+        {
+            sink.task.abort();
+            if state.speaker_sinks.get(&space_id).is_some_and(HashMap::is_empty) {
+                state.speaker_sinks.remove(&space_id);
+            }
+        }
+        if let Some(outputs) = state.speaker_outputs.get_mut(&space_id) {
+            outputs.remove(&output_id);
+            if outputs.is_empty() {
+                state.speaker_outputs.remove(&space_id);
+            }
+        }
+        if let Some(inputs) = state.speaker_output_inputs.get_mut(&space_id) {
+            inputs.remove(&output_id);
+            if inputs.is_empty() {
+                state.speaker_output_inputs.remove(&space_id);
+            }
+        }
+    }
+
+    pub async fn remove_speaker_output_for_space(&self, space_id: Id) {
+        let mut state = self.state.lock().await;
+        state.speaker_outputs.remove(&space_id);
+        state.speaker_output_inputs.remove(&space_id);
+        if let Some(sinks) = state.speaker_sinks.remove(&space_id) {
+            for sink in sinks.into_values() {
+                sink.task.abort();
+            }
+        }
     }
 }
 
@@ -1771,15 +2262,15 @@ impl UserEventWorker for AgentWorker {
 }
 
 impl AgentState {
-    pub async fn process_input_event(&mut self, user_ev: UserEvent) -> Result<()> {
+    pub async fn process_input_event(&mut self, user_ev: UserEvent) -> Result<ResponseTrigger> {
         if !self.usage.is_available() {
-            return Ok(());
+            return Ok(ResponseTrigger::None);
         }
         let user_id = self.get_user_id();
         let ev_user_id = &user_ev.user_id;
 
         if ev_user_id.as_ref() == Some(&user_id) {
-            return Ok(());
+            return Ok(ResponseTrigger::None);
         }
 
         #[cfg(all(
@@ -1799,7 +2290,7 @@ impl AgentState {
                     });
                 }
             }
-            return Ok(());
+            return Ok(ResponseTrigger::None);
         }
 
         let ev_name = user_ev.get_event_name();
@@ -1815,11 +2306,12 @@ impl AgentState {
             }
         } else {
             let mut is_image = false;
+            let is_speech = SpeakEvent::from_dynamic(&user_ev.ev).is_some();
 
             let content = if let Some(ev) = ImageBytesEvent::from_dynamic(&user_ev.ev) {
                 if let Some(last_image_time) = self.last_image_time {
                     if Instant::now().duration_since(last_image_time) < Duration::from_secs(30) {
-                        return Ok(());
+                                return Ok(ResponseTrigger::None);
                     }
                 }
                 self.last_image_time = Some(Instant::now());
@@ -1840,7 +2332,7 @@ impl AgentState {
                     .task_configs_by_name
                     .contains_key(&ev_name)
                 {
-                    return Ok(());
+                    return Ok(ResponseTrigger::None);
                 }
 
                 Content::Text(ev_description.clone())
@@ -1880,17 +2372,114 @@ impl AgentState {
             //let sx = sx.clone();
 
             //let prompt_text = prompt_text;
-            self.new_message(space_id.clone(), MessageRole::user, content);
-            if !is_image {
-                self.get_chat_completion_response(space_id).await?;
-            }
+            let structured_sender = ev_user_id
+                .map(|id| format!("user_{}", id.to_pretty_string()));
+            let display_sender = ev_user_id
+                .map(|id| format!("user {}", id.to_pretty_string()));
+            let content = match (display_sender.as_deref(), content) {
+                (Some(sender), Content::Text(text)) => {
+                    Content::Text(format!("[{sender}] {text}"))
+                }
+                (_, content) => content,
+            };
+            self.new_message_with_name(space_id.clone(), MessageRole::user, structured_sender, content);
+            return Ok(response_trigger(space_id, is_speech, is_image));
         }
 
-        Ok(())
+        Ok(ResponseTrigger::None)
     }
 
-    pub fn is_context_running(&mut self, context_id: Id) -> bool {
-        self.running_contexts.contains_key(&context_id)
+    fn speaker_targets(&self, space_id: &Id) -> Vec<(Id, AudioFormat)> {
+        self.speaker_sinks
+            .get(space_id)
+            .map(|sinks| {
+                sinks
+                    .iter()
+                    .map(|(output_id, sink)| (output_id.clone(), sink.format))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    fn enqueue_speaker_samples(&mut self, space_id: &Id, output_id: &Id, samples: Vec<i16>) {
+        let result = self
+            .speaker_sinks
+            .get(space_id)
+            .and_then(|sinks| sinks.get(output_id))
+            .map(|sink| sink.sender.try_send(samples));
+        if let Some(Err(error)) = result {
+            tracing::warn!(%space_id, %output_id, %error, "Removing saturated speaker sink");
+            if let Some(sink) = self
+                .speaker_sinks
+                .get_mut(space_id)
+                .and_then(|sinks| sinks.remove(output_id))
+            {
+                sink.task.abort();
+            }
+            if self.speaker_sinks.get(space_id).is_some_and(HashMap::is_empty) {
+                self.speaker_sinks.remove(space_id);
+            }
+            if let Some(outputs) = self.speaker_outputs.get_mut(space_id) {
+                outputs.remove(output_id);
+                if outputs.is_empty() {
+                    self.speaker_outputs.remove(space_id);
+                }
+            }
+            if let Some(inputs) = self.speaker_output_inputs.get_mut(space_id) {
+                if let Some(input) = inputs.remove(output_id) {
+                    input.clear();
+                }
+                if inputs.is_empty() {
+                    self.speaker_output_inputs.remove(space_id);
+                }
+            }
+        }
+    }
+
+    fn clear_speaker_queues(&mut self, space_id: &Id) {
+        if let Some(sinks) = self.speaker_sinks.get_mut(space_id) {
+            for sink in sinks.values_mut() {
+                let _ = sink.clear.send_modify(|version| *version = version.wrapping_add(1));
+            }
+        }
+        if let Some(inputs) = self.speaker_output_inputs.get(space_id) {
+            for input in inputs.values() {
+                input.clear();
+            }
+        }
+    }
+
+    fn schedule_response(&mut self, space_id: Id) -> (Id, CancellationToken) {
+        self.clear_speaker_queues(&space_id);
+        supersede_space_turn(
+            &mut self.pending_turns,
+            &self.running_contexts,
+            &space_id,
+        );
+
+        let turn_id = Id::new();
+        let cancellation = CancellationToken::new();
+        self.pending_turns.insert(
+            space_id,
+            PendingTurn {
+                turn_id: turn_id.clone(),
+                cancellation: cancellation.clone(),
+            },
+        );
+        (turn_id, cancellation)
+    }
+
+    pub fn is_context_running(&self, context_id: Id) -> bool {
+        self.running_contexts
+            .values()
+            .any(|context| context.context_id == context_id && !context.cancellation.is_cancelled())
+    }
+
+    fn context_token(&self, context_id: Id) -> Option<CancellationToken> {
+        self.running_contexts
+            .values()
+            .find(|context| context.context_id == context_id)
+            .map(|context| context.cancellation.clone())
     }
 
     pub async fn get_chat_completion_response(&mut self, space_id: Id) -> Result<()> {
@@ -1900,15 +2489,18 @@ impl AgentState {
             .ok_or_else(|| anyhow!("No local chat completion provider is enabled"))?;
         let chat_completer = dyn_clone::clone_box(chat_completer);
 
-        self.running_contexts.retain(|k, mut v| {
-            v.send(());
-            false
-        });
-
-        let (cancel_tx, mut cancel_rx) = tokio::sync::broadcast::channel::<()>(1);
-
+        if let Some(previous) = self.running_contexts.remove(&space_id) {
+            previous.cancellation.cancel();
+        }
         let context_id = Id::new();
-        self.running_contexts.insert(context_id.clone(), cancel_tx);
+        let cancellation = CancellationToken::new();
+        self.running_contexts.insert(
+            space_id.clone(),
+            RunningContext {
+                context_id: context_id.clone(),
+                cancellation: cancellation.clone(),
+            },
+        );
 
         //let x = .unwrap();
         let mut response_worker = ChatCompletionResponseWorker::new(
@@ -1929,7 +2521,7 @@ impl AgentState {
                         tracing::error!(%error, "Local chat completion failed");
                     }
                 },
-                _ = cancel_rx.recv() => {
+                _ = wait_for_cancellation(cancellation.clone()) => {
                     debug!("Cancelled agent repsonse!")
                 }
             }
@@ -1964,6 +2556,13 @@ impl AgentState {
     }
 
     async fn stop(&mut self) -> Result<()> {
+        self.token.cancel();
+        for context in self.running_contexts.values() {
+            context.cancellation.cancel();
+        }
+        for pending in self.pending_turns.values() {
+            pending.cancellation.cancel();
+        }
         self.cancel_tx.send(())?;
         Ok(())
     }
@@ -1973,49 +2572,19 @@ impl AgentState {
     }
 
     fn new_message(&mut self, space_id: Id, role: MessageRole, content: Content) {
+        self.new_message_with_name(space_id, role, None, content);
+    }
+
+    fn new_message_with_name(
+        &mut self,
+        space_id: Id,
+        role: MessageRole,
+        name: Option<String>,
+        content: Content,
+    ) {
         let mut messages = self.get_messages(&space_id);
 
-        match content.clone() {
-            Content::Text(text) => {
-                if let Some(i) = messages
-                    .iter()
-                    .rposition(|x| matches!(x.content, Content::Text { .. }))
-                {
-                    let mut message = &mut messages[i];
-
-                    if message.role == role {
-                        let text_content = (if let Content::Text(text) = message.content.clone() {
-                            Some(text)
-                        } else {
-                            None
-                        })
-                        .unwrap();
-
-                        message.content =
-                            Content::Text(text_content + &("\n".to_string() + text.as_str()));
-                        return;
-                    }
-                }
-            }
-            Content::ImageUrl(image_url) => {
-                messages.retain(|x| {
-                    if let Content::Text(_) = x.content.clone() {
-                        true
-                    } else {
-                        false
-                    }
-                });
-            }
-        }
-
-        let message = ChatCompletionMessage {
-            name: None,
-            role: role,
-            content: content,
-            function_call: None,
-        };
-
-        messages.push(message);
+        append_chat_message(&mut messages, role, name, content);
     }
 
     async fn try_recv_event(&mut self) -> Result<UserEvent> {
@@ -2028,7 +2597,6 @@ impl AgentState {
     }
 
     async fn output_event(&mut self, task: UserEvent) -> Result<()> {
-        //println!("User {} outputting event of type {}.", self.user_id, task.get_event_name()?);
         self.output_tx.send(task)?;
         Ok(())
     }
@@ -2036,6 +2604,62 @@ impl AgentState {
     async fn send_event(&mut self, task: UserEvent) -> Result<()> {
         self.input_tx.send(task)?;
         Ok(())
+    }
+}
+
+fn append_chat_message(
+    messages: &mut Vec<ChatCompletionMessage>,
+    role: MessageRole,
+    name: Option<String>,
+    content: Content,
+) {
+    match content.clone() {
+        Content::Text(text) => {
+            if let Some(i) = messages
+                .iter()
+                .rposition(|x| matches!(x.content, Content::Text { .. }))
+            {
+                let message = &mut messages[i];
+
+                if message.role == role && message.name == name {
+                    let text_content = (if let Content::Text(text) = message.content.clone() {
+                        Some(text)
+                    } else {
+                        None
+                    })
+                    .unwrap();
+
+                    message.content =
+                        Content::Text(text_content + &("\n".to_string() + text.as_str()));
+                    return;
+                }
+            }
+        }
+        Content::ImageUrl(_) => {
+            messages.retain(|x| matches!(x.content, Content::Text(_)));
+        }
+    }
+
+    let message = ChatCompletionMessage {
+        name,
+        role,
+        content,
+        function_call: None,
+        };
+
+    messages.push(message);
+}
+
+fn supersede_space_turn(
+    pending_turns: &mut HashMap<Id, PendingTurn>,
+    running_contexts: &HashMap<Id, RunningContext>,
+    space_id: &Id,
+) {
+    if let Some(pending) = pending_turns.remove(space_id) {
+        pending.cancellation.cancel();
+    }
+    if let Some(running) = running_contexts.get(space_id) {
+        running.cancellation.cancel();
     }
 }
 
