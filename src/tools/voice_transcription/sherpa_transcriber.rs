@@ -72,7 +72,7 @@ impl SherpaTranscriber {
         config.decoding_method = Some("greedy_search".into());
         config.enable_endpoint = true;
         config.rule1_min_trailing_silence = 0.8;
-        config.rule2_min_trailing_silence = 0.8;
+        config.rule2_min_trailing_silence = 1.2;
         Self::new(config)
     }
 }
