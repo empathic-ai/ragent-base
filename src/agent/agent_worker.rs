@@ -706,6 +706,10 @@ impl ChatCompletionResponseWorker {
     }
 
     fn parse_arguments(input: &str) -> Vec<String> {
+        let trimmed = input.trim();
+        if trimmed.starts_with('{') && serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(trimmed).is_ok() {
+            return vec![trimmed.to_owned()];
+        }
         let mut args = Vec::new();
         let mut current_arg: Option<String> = None;
         let mut in_quotes = false;
@@ -979,6 +983,15 @@ mod tests {
             ChatCompletionResponseWorker::parse_arguments("'hello, world', next"),
             ["hello, world", "next"]
         );
+    }
+
+    #[test]
+    fn parse_arguments_preserves_structured_proposal_json() {
+        let proposal = r#"{"summary":"Review \"name)\" rename","decisions":[{"evidence":["src/model.rs","commit:abc"]}],"unresolved":[]}"#;
+        assert_eq!(ChatCompletionResponseWorker::parse_arguments(proposal), [proposal]);
+        let calls = AgentWorker::parse_isolated_task_calls(&format!("finish_proposal({proposal})")).unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].arguments, [proposal]);
     }
 
     #[tokio::test]
@@ -2593,8 +2606,21 @@ fn get_commands(input: &str) -> (Vec<String>, String) {
     let mut paranthesis_count = 0;
     let mut dangling_text = "".to_string();
     let mut in_quotes = false;
+    let mut escaped = false;
 
     for c in input.trim_start().trim_start_matches('(').chars() {
+        if escaped {
+            current.push(c);
+            dangling_text.push(c);
+            escaped = false;
+            continue;
+        }
+        if in_quotes && c == '\\' {
+            current.push(c);
+            dangling_text.push(c);
+            escaped = true;
+            continue;
+        }
         match c {
             '"' => {
                 in_quotes = !in_quotes;
