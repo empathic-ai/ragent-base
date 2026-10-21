@@ -795,6 +795,51 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn greeting_rechecks_authority_after_lock_wait() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let original_space = Id::new();
+        let requested_space = Id::new();
+        let worker = AgentWorker::new(Id::new(), original_space, AgentConfig::default()).await;
+        let authorized = AtomicBool::new(true);
+        let state = worker.state.lock().await;
+        let greeting = worker.start_conversation_if(
+            requested_space, || authorized.load(Ordering::Acquire),
+        );
+        tokio::pin!(greeting);
+        assert!(futures_util::poll!(&mut greeting).is_pending());
+        authorized.store(false, Ordering::Release);
+        drop(state);
+        assert!(!greeting.await.unwrap());
+        let state = worker.state.lock().await;
+        assert_eq!(state.primary_space_id, original_space);
+        assert!(!state.messages.contains_key(&requested_space));
+        state.token.cancel();
+    }
+
+    #[tokio::test]
+    async fn speaker_installation_rechecks_authority_after_lock_wait() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let space = Id::new();
+        let output_id = Id::new();
+        let worker = AgentWorker::new(Id::new(), space, AgentConfig::default()).await;
+        let (_input, output) = AudioOutput::new_with_input(16, AudioFormat::new(16_000, 1, 16));
+        let authorized = AtomicBool::new(true);
+        let state = worker.state.lock().await;
+        let install = worker.set_named_speaker_output_for_space_if(
+            space, output_id, None, output, || authorized.load(Ordering::Acquire),
+        );
+        tokio::pin!(install);
+        assert!(futures_util::poll!(&mut install).is_pending());
+        authorized.store(false, Ordering::Release);
+        drop(state);
+        assert!(!install.await);
+        let state = worker.state.lock().await;
+        assert!(!state.speaker_outputs.contains_key(&space));
+        assert!(!state.speaker_sinks.contains_key(&space));
+        state.token.cancel();
+    }
+
+    #[tokio::test]
     async fn speaker_preserves_utterances_larger_than_buffer() {
         let (input, mut output) = AudioOutput::new_with_input(8, AudioFormat::new(1000, 1, 16));
         let samples: Vec<i16> = (0..64).collect();
@@ -1419,7 +1464,16 @@ impl AgentWorker {
     }
 
     pub async fn start_conversation(&self, space_id: Id) -> Result<()> {
+        self.start_conversation_if(space_id, || true).await.map(|_| ())
+    }
+
+    /// Check admission after acquiring the state lock, before adding the greeting.
+    /// This does not cancel provider work if authority changes after admission.
+    pub async fn start_conversation_if(
+        &self, space_id: Id, authorized: impl FnOnce() -> bool,
+    ) -> Result<bool> {
         let mut state = self.state.lock().await;
+        if !authorized() { return Ok(false); }
         state.primary_space_id = space_id.clone();
 
         state.new_message(
@@ -1427,7 +1481,8 @@ impl AgentWorker {
             MessageRole::system,
             Content::Text(CONVERSATION_START_PROMPT.to_string()),
         );
-        state.get_chat_completion_response(space_id).await
+        state.get_chat_completion_response(space_id).await?;
+        Ok(true)
     }
 
     pub fn set_usage(&mut self, usage: UsageReporter) {
@@ -2104,7 +2159,23 @@ impl AgentWorker {
         audio_input: Option<AudioInput>,
         speaker_output: AudioOutput,
     ) {
+        self.set_named_speaker_output_for_space_if(
+            space_id, output_id, audio_input, speaker_output, || true,
+        ).await;
+    }
+
+    /// Check admission after acquiring the state lock, before replacing any sink.
+    /// Later revocation still requires retiring the installed output separately.
+    pub async fn set_named_speaker_output_for_space_if(
+        &self,
+        space_id: Id,
+        output_id: Id,
+        audio_input: Option<AudioInput>,
+        speaker_output: AudioOutput,
+        authorized: impl FnOnce() -> bool,
+    ) -> bool {
         let mut state = self.state.lock().await;
+        if !authorized() { return false; }
         if let Some(previous) = state
             .speaker_sinks
             .get_mut(&space_id)
@@ -2144,6 +2215,7 @@ impl AgentWorker {
                 state.speaker_output_inputs.remove(&space_id);
             }
         }
+        true
     }
 
     pub async fn remove_named_speaker_output_for_space(&self, space_id: Id, output_id: Id) {

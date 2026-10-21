@@ -131,6 +131,9 @@ impl UserEvent {
     }
 
     pub fn get_event_name(&self) -> String {
+        if let Some(type_path) = crate::types::history_payload::unknown_type(&self.ev) {
+            return type_path.to_owned();
+        }
         crate::prelude::get_event_name_from_type_name(
             self.ev
                 .get_represented_struct_info()
